@@ -1,0 +1,16 @@
+{
+  "type": "module",
+  "engines": {
+    "node": "22"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "firebase-admin": "^10.3.0",
+    "firebase-functions": "^4.9.0",
+    "mysql2": "^3.9.0"
+  },
+  "scripts": {
+    "build": "echo \"No build step\"",
+    "deploy": "firebase deploy --only functions"
+  }
+}
