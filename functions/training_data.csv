@@ -1,0 +1,119 @@
+texto,categoria
+cuándo empieza la estadía,fechas
+qué día inicia el periodo de estadía,fechas
+cuándo termina la estadía,fechas
+fecha de inicio de estadía,fechas
+fecha de fin de estadía,fechas
+cuándo arranca la estadía este semestre,fechas
+oye cuándo es lo de la estadía,fechas
+ps cuándo empieza,fechas
+hasta cuándo dura la estadía,fechas
+qué fechas son las de la estadía,fechas
+cuándo inicia la residencia profesional,fechas
+en qué fecha empieza la estancia,fechas
+cuánto dura la estadía,fechas
+cuándo es la fecha límite de la estadía,fechas
+inicio de estadía,fechas
+fin de estadía,fechas
+fechas de residencia,fechas
+cuándo termina el periodo,fechas
+cuándo entramos a estadía,fechas
+qué día es el último de estadía,fechas
+horario de servicios escolares,horarios
+a qué hora atiende control escolar,horarios
+cuándo está abierto servicios escolares,horarios
+horario de atención de la escuela,horarios
+en qué horario atienden,horarios
+horario del profesor López,horarios
+horario de los profes,horarios
+qué días tiene clases el profesor,horarios
+a qué hora abren servicios,horarios
+cuándo puedo ir a servicios escolares,horarios
+horario de vinculación,horarios
+a qué hora atiende vinculación,horarios
+horario de atención de los maestros,horarios
+cuándo puedo hablar con mi asesor,horarios
+días de asesoría del profe,horarios
+horario escolar,horarios
+como contactar con mi profe,horarios
+cuál es mi proyecto,mis_proyectos
+quién es mi asesor,mis_proyectos
+mis datos,mis_proyectos
+mi información,mis_proyectos
+ver mis proyectos,mis_proyectos
+cómo está mi proyecto,mis_proyectos
+qué onda con mi estadía,mis_proyectos
+en qué estatus está mi proyecto,mis_proyectos
+información de mi estadía,mis_proyectos
+dame mis datos,mis_proyectos
+cuáles son mis proyectos,mis_proyectos
+qué proyectos tengo subidos,mis_proyectos
+mis proyectos en skillmatch,mis_proyectos
+qué tecnologías tiene mi proyecto,mis_proyectos
+subí un proyecto quiero verlo,mis_proyectos
+cuál es mi proyecto más reciente,mis_proyectos
+mis proyectos registrados,mis_proyectos
+quiero ver mi portafolio,mis_proyectos
+qué proyectos he subido,mis_proyectos
+estado de mis proyectos,mis_proyectos
+ver mi proyecto edumochila,mis_proyectos
+mis trabajos en la plataforma,mis_proyectos
+proyectos que tengo en skillmatch,mis_proyectos
+mi proyecto está completado,mis_proyectos
+cuántos proyectos tengo,mis_proyectos
+información de mi proyecto,mis_proyectos
+cómo registro mi empresa,faq
+qué pasa si no tengo empresa,faq
+dónde consulto mis calificaciones,faq
+qué documentos necesito para la estadía,faq
+cómo me registro en skillmatch,faq
+qué es la estadía profesional,faq
+cuántas horas son la estadía,faq
+qué pasa si repruebo la estadía,faq
+cómo subo mis evidencias,faq
+qué es la carta de presentación,faq
+cómo consigo empresa para estadía,faq
+qué requisitos necesito,faq
+puedo hacer estadía en otra ciudad,faq
+qué pasa si la empresa no me firma,faq
+cómo contacto a vinculación,faq
+tengo una duda,faq
+necesito ayuda con mi estadía,faq
+qué hago si mi empresa cierra,faq
+puedo cambiar de empresa,faq
+requisitos para titulación por estadía,faq
+hola,menu
+buenas,menu
+buenos días,menu
+qué puedes hacer,menu
+ayuda,menu
+menú,menu
+opciones,menu
+inicio,menu
+empezar,menu
+start,menu
+info,menu
+información,menu
+no entendí,menu
+regresar,menu
+volver al menú,menu
+qué empresas buscan desarrolladores,buscar_matching
+empresas que necesiten react,buscar_matching
+hay empresas que busquen node js,buscar_matching
+qué empresas buscan alumnos de software,buscar_matching
+empresas que contraten estudiantes,buscar_matching
+busco empresa para estadía,buscar_matching
+qué vacantes hay disponibles,buscar_matching
+empresas que busquen mysql,buscar_matching
+hay oportunidades para estudiantes de redes,buscar_matching
+buscar empresa por tecnología,buscar_matching
+alumnos que sepan react,buscar_matching
+busco estudiantes con conocimientos en python,buscar_matching
+quiero ver alumnos que sepan node,buscar_matching
+estudiantes disponibles para estadía,buscar_matching
+buscar talento con javascript,buscar_matching
+ver proyectos con react,buscar_matching
+alumnos con experiencia en mysql,buscar_matching
+busco practicantes que sepan programar,buscar_matching
+ver estudiantes de ingeniería en software,buscar_matching
+qué alumnos tienen proyectos con python,buscar_matching
