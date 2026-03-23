@@ -1,18 +1,14 @@
-// =========================================================
-// 📱 ChatBot SkillMatch — WhatsApp con Neurona ML integrada
+// ChatBot SkillMatch — WhatsApp con Neurona ML integrada
 // Node.js 22 con ESM y Firebase Functions
-// =========================================================
 
 import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { defineSecret } from "firebase-functions/params";
 import axios from "axios";
-import mysql from "mysql2/promise";                              // NUEVO: conexión real a MySQL
-import { entrenarClasificador, clasificar } from "./classifier.js"; // NUEVO: neurona ML
+import mysql from "mysql2/promise";                              
+import { entrenarClasificador, clasificar } from "./classifier.js"; // neurona ML
 
-// =========================================================
-// SECRETS (los mismos que ya tenías + uno nuevo para Claude)
-// =========================================================
+// SECRETS 
 const VERIFY_TOKEN             = defineSecret("VERIFY_TOKEN_SKILLMATCH");
 const WHATSAPP_TOKEN           = defineSecret("WHATSAPP_TOKEN_SKILLMATCH");
 const WHATSAPP_PHONE_NUMBER_ID = defineSecret("WHATSAPP_PHONE_NUMBER_ID_SKILLMATCH");
@@ -20,17 +16,13 @@ const DB_HOST                  = defineSecret("DB_HOST_SKILLMATCH");
 const DB_USER                  = defineSecret("DB_USER_SKILLMATCH");
 const DB_PASSWORD              = defineSecret("DB_PASSWORD_SKILLMATCH");
 const DB_NAME                  = defineSecret("DB_NAME_SKILLMATCH");
-const ANTHROPIC_KEY            = defineSecret("ANTHROPIC_KEY_SKILLMATCH"); // NUEVO
+const ANTHROPIC_KEY            = defineSecret("ANTHROPIC_KEY_SKILLMATCH"); // claude
 
-// =========================================================
 // NEURONA: se entrena una vez cuando Firebase carga el módulo
 // Lee training_data.csv y aprende a clasificar mensajes
-// =========================================================
 entrenarClasificador();
 
-// =========================================================
 // CONEXIÓN A MYSQL (Pool Lazy — igual que ya lo tenías)
-// =========================================================
 let pool = null;
 function getPool(cfg) {
   if (!pool) {
@@ -48,9 +40,7 @@ function getPool(cfg) {
   return pool;
 }
 
-// =========================================================
 // FUNCIONES WHATSAPP (exactamente las mismas que tenías)
-// =========================================================
 const WA_API = (phoneNumberId) =>
   `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
 
@@ -107,9 +97,7 @@ async function sendWhatsAppButtons({ to, token, phoneNumberId, bodyText, buttons
   );
 }
 
-// =========================================================
-// MENU PRINCIPAL (ampliado con 2 opciones nuevas)
-// =========================================================
+// MENU PRINCIPAL 
 const MENU_SECTIONS = [
   {
     title: "Opciones",
@@ -118,19 +106,18 @@ const MENU_SECTIONS = [
       { id: "opcion_horarios",  title: "🕘 Horarios servicios",    description: "Horarios de servicios escolares" },
       { id: "opcion_faq",       title: "📋 Preguntas frecuentes",  description: "Dudas comunes de estudiantes" },
       { id: "opcion_profes",    title: "👨‍🏫 Profesores",           description: "Horarios de profesores" },
-      { id: "opcion_proyectos", title: "📁 Mis proyectos",         description: "Tus proyectos en SkillMatch" },  // NUEVO
-      { id: "opcion_matching",  title: "🔍 Buscar tecnología",     description: "Empresas o estudiantes" },        // NUEVO
+      { id: "opcion_proyectos", title: "📁 Mis proyectos",         description: "Tus proyectos en SkillMatch" },  
+      { id: "opcion_matching",  title: "🔍 Buscar tecnología",     description: "Empresas o estudiantes" },        
     ],
   },
 ];
 
-// Botones de cierre (los mismos que ya tenías)
+// Botones 
 const CIERRE_BUTTONS = [
   { id: "cierre_si", title: "✅ Sí" },
   { id: "cierre_no", title: "❌ No" },
 ];
 
-// Igual que antes
 async function enviarMenu({ to, token, phoneNumberId }) {
   await sendWhatsAppList({
     to, token, phoneNumberId,
@@ -141,7 +128,6 @@ async function enviarMenu({ to, token, phoneNumberId }) {
   });
 }
 
-// Igual que antes (solo renombrada para claridad)
 async function enviarRespuestaConCierre({ to, token, phoneNumberId, textoRespuesta }) {
   await sendWhatsAppButtons({
     to, token, phoneNumberId,
@@ -150,9 +136,7 @@ async function enviarRespuestaConCierre({ to, token, phoneNumberId, textoRespues
   });
 }
 
-// =========================================================
-// CONSULTAS A BASE DE DATOS  — NUEVO
-// =========================================================
+// CONSULTAS A BASE DE DATOS  
 
 // Busca al usuario por su número de WhatsApp
 // REQUISITO: correr este SQL una sola vez en tu BD:
@@ -199,9 +183,7 @@ async function buscarEstudiantesPorTecnologia(tecnologia, db) {
   return rows;
 }
 
-// =========================================================
-// CLAUDE API — Responde preguntas abiertas (FAQ)  — NUEVO
-// =========================================================
+// CLAUDE API — Responde preguntas abiertas (FAQ)  
 async function preguntarAClaude(pregunta, apiKey) {
   const DOCUMENTO = `
 Eres el asistente virtual de SkillMatch, plataforma de la UTEQ (Universidad Tecnológica de Querétaro).
@@ -241,16 +223,14 @@ No inventes información que no esté aquí.
     "No pude procesar tu pregunta. Acude a Servicios Escolares.";
 }
 
-// =========================================================
 // MANEJADOR DE MENSAJES — handleMessage
-// Estructura base igual a la tuya, con la neurona integrada
-// =========================================================
+// Estructura base 
 const userState = {};
 
 async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
   const estado = userState[from] || "inicio";
 
-  // Extraer ID o texto — igual que antes
+  // Extraer ID o texto 
   let seleccionId = null;
   let textoLibre  = null;
 
@@ -265,7 +245,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     return;
   }
 
-  // ── Estado: esperando sí/no — igual que antes ────────
+  // Estado: esperando sí/no
   if (estado === "esperando_cierre") {
     if (
       seleccionId === "cierre_no" ||
@@ -284,7 +264,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     return;
   }
 
-  // ── Estado: esperando tecnología para matching — NUEVO ─
+  // Estado: esperando tecnología para matching 
   if (estado === "esperando_tecnologia") {
     if (!textoLibre) {
       await sendWhatsAppText({
@@ -319,11 +299,10 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     return;
   }
 
-  // =========================================================
-  // ✨ AQUÍ ENTRA LA NEURONA
+  // AQUÍ ENTRA LA NEURONA
   // Botones del menú → intención directa (sin neurona)
   // Texto libre      → neurona clasifica la intención
-  // =========================================================
+
   const mapaMenu = {
     opcion_fechas:    "fechas",
     opcion_horarios:  "horarios",
@@ -474,9 +453,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
   }
 }
 
-// =========================================================
-// WEBHOOK PRINCIPAL — igual que el tuyo, solo agrega db y cfg
-// =========================================================
+// WEBHOOK PRINCIPAL 
 export const whatsappWebhookSkillMatch = onRequest(
   {
     cors: true,
@@ -501,7 +478,7 @@ export const whatsappWebhookSkillMatch = onRequest(
       ANTHROPIC_KEY:            ANTHROPIC_KEY.value(),
     };
 
-    // GET: verificación Meta — igual que antes
+    // GET: verificación Meta 
     if (req.method === "GET") {
       const mode      = req.query["hub.mode"];
       const token     = req.query["hub.verify_token"];
@@ -511,7 +488,7 @@ export const whatsappWebhookSkillMatch = onRequest(
         : res.sendStatus(403);
     }
 
-    // POST: mensajes entrantes — igual que antes
+    // POST: mensajes entrantes 
     try {
       const body = req.body;
       logger.info("Webhook body", body);
