@@ -1,8 +1,5 @@
-// =========================================================
-// 🧠 classifier.js — Neurona ML con natural.js
+// classifier.js — Neurona ML con natural.js
 // Naive Bayes + TF-IDF para clasificar intenciones
-// Vive dentro de functions/ junto a index.js
-// =========================================================
 
 import natural from "natural";
 import fs from "fs";
@@ -11,27 +8,24 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// ─── Instancia del clasificador Naive Bayes ───────────────
+// Instancia del clasificador Naive Bayes
 const classifier = new natural.BayesClassifier();
 let entrenado = false;
 
-// =========================================================
-// 🏋️ ENTRENAMIENTO
-// Lee training_data.csv y entrena la neurona.
-// Se llama UNA SOLA VEZ al arrancar Firebase Functions.
-// =========================================================
+// Lee training_data.csv y entrena la neurona
+// Se llama UNA SOLA VEZ al arrancar Firebase Functions
 export function entrenarClasificador() {
   if (entrenado) return; // Evita reentrenar si ya está listo
 
   const csvPath = path.join(__dirname, "training_data.csv");
 
   if (!fs.existsSync(csvPath)) {
-    console.error("❌ No se encontró training_data.csv en:", csvPath);
+    console.error(" No se encontró training_data.csv en:", csvPath);
     return;
   }
 
   const csv = fs.readFileSync(csvPath, "utf8");
-  const lineas = csv.trim().split("\n").slice(1); // Salta el header
+  const lineas = csv.trim().split("\n").slice(1); 
 
   let total = 0;
   for (const linea of lineas) {
@@ -49,14 +43,12 @@ export function entrenarClasificador() {
 
   classifier.train();
   entrenado = true;
-  console.log(`✅ Neurona entrenada con ${total} frases`);
+  console.log(`Neurona entrenada con ${total} frases`);
 }
 
-// =========================================================
-// 🔍 CLASIFICACIÓN
+// CLASIFICACIÓN
 // Recibe un texto libre y devuelve la intención detectada.
 // Retorna: { intencion, confianza, necesitaMenu }
-//
 // Categorías posibles:
 //   fechas         → info pública sobre fechas de estadía
 //   horarios       → horarios de servicios / profesores
@@ -64,7 +56,7 @@ export function entrenarClasificador() {
 //   faq            → dudas generales → Claude API
 //   buscar_matching→ matching empresa↔estudiante por tecnología
 //   menu           → saludo o fallback → mostrar menú
-// =========================================================
+
 export function clasificar(textoOriginal) {
   if (!entrenado) {
     console.warn("⚠️ Clasificador no entrenado, mostrando menú");

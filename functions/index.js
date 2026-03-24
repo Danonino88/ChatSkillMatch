@@ -22,7 +22,7 @@ const ANTHROPIC_KEY            = defineSecret("ANTHROPIC_KEY_SKILLMATCH"); // cl
 // Lee training_data.csv y aprende a clasificar mensajes
 entrenarClasificador();
 
-// CONEXIÓN A MYSQL (Pool Lazy — igual que ya lo tenías)
+// CONEXIÓN A MYSQL
 let pool = null;
 function getPool(cfg) {
   if (!pool) {
@@ -102,26 +102,26 @@ const MENU_SECTIONS = [
   {
     title: "Opciones",
     rows: [
-      { id: "opcion_fechas",    title: "📅 Fechas de estadía",    description: "Inicio y fin de la estadía" },
-      { id: "opcion_horarios",  title: "🕘 Horarios servicios",    description: "Horarios de servicios escolares" },
-      { id: "opcion_faq",       title: "📋 Preguntas frecuentes",  description: "Dudas comunes de estudiantes" },
-      { id: "opcion_profes",    title: "👨‍🏫 Profesores",           description: "Horarios de profesores" },
-      { id: "opcion_proyectos", title: "📁 Mis proyectos",         description: "Tus proyectos en SkillMatch" },  
-      { id: "opcion_matching",  title: "🔍 Buscar tecnología",     description: "Empresas o estudiantes" },        
+      { id: "opcion_fechas",    title: " Fechas de estadía",    description: "Inicio y fin de la estadía" },
+      { id: "opcion_horarios",  title: " Horarios servicios",    description: "Horarios de servicios escolares" },
+      { id: "opcion_faq",       title: " Preguntas frecuentes",  description: "Dudas comunes de estudiantes" },
+      { id: "opcion_profes",    title: " Profesores",           description: "Horarios de profesores" },
+      { id: "opcion_proyectos", title: " Mis proyectos",         description: "Tus proyectos en SkillMatch" },  
+      { id: "opcion_matching",  title: " Buscar tecnología",     description: "Empresas o estudiantes" },        
     ],
   },
 ];
 
 // Botones 
 const CIERRE_BUTTONS = [
-  { id: "cierre_si", title: "✅ Sí" },
-  { id: "cierre_no", title: "❌ No" },
+  { id: "cierre_si", title: "Sí" },
+  { id: "cierre_no", title: "No" },
 ];
 
 async function enviarMenu({ to, token, phoneNumberId }) {
   await sendWhatsAppList({
     to, token, phoneNumberId,
-    headerText: "SkillMatch 🎓",
+    headerText: "SkillMatch ",
     bodyText:   "¡Bienvenido! ¿Qué deseas consultar?\nSelecciona una opción o escribe tu pregunta directamente.",
     buttonText: "Ver opciones",
     sections:   MENU_SECTIONS,
@@ -282,14 +282,14 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       if (estudiantes.length === 0) {
         respuesta = `No encontré estudiantes con proyectos en *${textoLibre}* por el momento.`;
       } else {
-        respuesta = `👨‍💻 *Estudiantes con proyectos en ${textoLibre}:*\n\n`;
+        respuesta = ` *Estudiantes con proyectos en ${textoLibre}:*\n\n`;
         for (const e of estudiantes) {
           respuesta += `• *${e.nombre} ${e.apellido}* — ${e.carrera}\n  Proyectos: ${e.proyectos}\n\n`;
         }
       }
     } else {
       respuesta =
-        `🏢 Para ver empresas que buscan *${textoLibre}*, visita el portal SkillMatch.\n\n` +
+        ` Para ver empresas que buscan *${textoLibre}*, visita el portal SkillMatch.\n\n` +
         `También puedes acudir a Vinculación para que te orienten.`;
     }
 
@@ -357,7 +357,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     case "fechas": {
       // TODO: leer de BD cuando tengas tabla estadias_config
       const texto =
-        "📅 *Fechas de estadía 2025–2026:*\n\n" +
+        "*Fechas de estadía 2025–2026:*\n\n" +
         "• *Inicio:* lunes 14 de abril de 2025\n" +
         "• *Fin:* viernes 18 de julio de 2025\n" +
         "• *Duración:* 480 hrs (IDGS) | 420 hrs (otras carreras)\n\n" +
@@ -369,7 +369,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
 
     case "horarios": {
       let texto =
-        "🕘 *Horarios de atención:*\n\n" +
+        " *Horarios de atención:*\n\n" +
         "*Servicios Escolares:*\nLun–Vie: 9:00–14:00 y 16:00–18:00\n\n" +
         "*Vinculación:*\nLun–Vie: 9:00–15:00\n\n";
       try {
@@ -408,7 +408,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
         await enviarRespuestaConCierre({ to: from, token, phoneNumberId, textoRespuesta: texto });
         break;
       }
-      let texto = `📁 *Tus proyectos, ${usuario.nombre}:*\n\n`;
+      let texto = ` *Tus proyectos, ${usuario.nombre}:*\n\n`;
       for (const p of proyectos) {
         const e = p.estado === "completado" ? "✅" : p.estado === "en progreso" ? "🔄" : "⏸️";
         texto += `${e} *${p.titulo}*\n   Tecnologías: ${p.tecnologias || "no especificadas"}\n\n`;
@@ -422,8 +422,8 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       userState[from]              = "esperando_tecnologia";
       userState[`${from}_usuario`] = usuario;
       const prompt = usuario?.rol === "empresa"
-        ? "🔍 ¿Qué tecnología buscan en sus candidatos?\n\nEscribe el nombre (ej: *React*, *Node.js*, *MySQL*...)"
-        : "🔍 ¿Qué tecnología quieres buscar?\n\nEscribe el nombre (ej: *React*, *Node.js*, *MySQL*...)";
+        ? " ¿Qué tecnología buscan en sus candidatos?\n\nEscribe el nombre (ej: *React*, *Node.js*, *MySQL*...)"
+        : " ¿Qué tecnología quieres buscar?\n\nEscribe el nombre (ej: *React*, *Node.js*, *MySQL*...)";
       await sendWhatsAppText({ to: from, token, phoneNumberId, text: prompt });
       break;
     }
