@@ -37,6 +37,7 @@ entrenarClasificador();
 // CONEXIÓN MYSQL (Pool Lazy)
 // =========================================================
 let pool = null;
+let poolWarmed = false;
 function getPool(cfg) {
   if (!pool) {
     pool = mysql.createPool({
@@ -50,7 +51,15 @@ function getPool(cfg) {
       queueLimit:       0,
       timezone:         "Z",
       ssl:              { rejectUnauthorized: true },  // Requerido por TiDB Cloud
+      enableKeepAlive:  true,                          // Reutiliza conexiones TCP
+      keepAliveInitialDelay: 10000,
+      connectTimeout:   10000,
     });
+    // Warm up: abre la conexion SSL de una vez (no bloquea)
+    if (!poolWarmed) {
+      poolWarmed = true;
+      pool.execute("SELECT 1").catch(() => {});
+    }
   }
   return pool;
 }
@@ -134,11 +143,40 @@ const CIERRE_BUTTONS = [
   { id: "cierre_no", title: "No" },
 ];
 
-async function enviarMenu({ to, token, phoneNumberId }) {
+// Genera saludo personalizado segun rol
+function obtenerSaludo(usuario) {
+  if (!usuario) {
+    return "Bienvenido a SkillMatch! Que deseas consultar?\nSelecciona una opcion o escribe tu pregunta directamente.";
+  }
+
+  const nombre = usuario.nombre.split(" ")[0]; // primer nombre
+  switch (usuario.rol) {
+    case "estudiante":
+      return `Hola *${nombre}*! 👋\n` +
+        (usuario.carrera ? `Carrera: ${usuario.carrera}\n` : "") +
+        (usuario.semestre ? `Semestre: ${usuario.semestre}\n` : "") +
+        `\nQue deseas consultar?`;
+    case "empresa":
+      return `Hola *${nombre}*! 👋\n` +
+        (usuario.razon_social ? `Empresa: ${usuario.razon_social}\n` : "") +
+        (usuario.giro ? `Giro: ${usuario.giro}\n` : "") +
+        `\nQue deseas consultar?`;
+    case "profesor":
+      return `Hola Profe *${nombre}*! 👋\n` +
+        (usuario.departamento ? `Depto: ${usuario.departamento}\n` : "") +
+        `\nQue deseas consultar?`;
+    case "admin":
+      return `Hola *${nombre}* (Admin)! 👋\nQue deseas consultar?`;
+    default:
+      return `Hola *${nombre}*! Que deseas consultar?`;
+  }
+}
+
+async function enviarMenu({ to, token, phoneNumberId, usuario = null }) {
   await sendWhatsAppList({
     to, token, phoneNumberId,
     headerText: "SkillMatch",
-    bodyText:   "Bienvenido a SkillMatch! Que deseas consultar?\nSelecciona una opcion o escribe tu pregunta directamente.",
+    bodyText:   obtenerSaludo(usuario),
     buttonText: "Ver opciones",
     sections:   MENU_SECTIONS,
   });
@@ -153,20 +191,58 @@ async function enviarRespuestaConCierre({ to, token, phoneNumberId, textoRespues
 }
 
 // =========================================================
+// CACHE DE RESPUESTAS ESTATICAS (fechas, horarios, etc.)
+// =========================================================
+const configCache = new Map();
+
+// =========================================================
 // CONSULTAS A BASE DE DATOS
 // =========================================================
 
-// Identifica al usuario por su numero de WhatsApp
+// =========================================================
+// CACHE DE USUARIOS (evita consultar la BD en cada mensaje)
+// =========================================================
+const userCache = new Map();
+const USER_CACHE_TTL = 300_000; // 5 minutos
+
+function getCachedUser(telefono) {
+  const entry = userCache.get(telefono);
+  if (!entry) return undefined; // no existe
+  if (Date.now() - entry.ts > USER_CACHE_TTL) {
+    userCache.delete(telefono);
+    return undefined;
+  }
+  return entry.data; // puede ser null (usuario no encontrado)
+}
+function setCachedUser(telefono, data) {
+  userCache.set(telefono, { data, ts: Date.now() });
+}
+
+// Identifica al usuario con UNA SOLA query (LEFT JOINs)
 async function identificarUsuario(telefono, db) {
+  // Revisar cache primero
+  const cached = getCachedUser(telefono);
+  if (cached !== undefined) return cached;
+
+  const telefonoLimpio = telefono.replace(/^521/, "");
   const [rows] = await db.execute(
-    `SELECT u.id_usuario, u.nombre, u.apellido, u.id_rol, r.nombre_rol AS rol
+    `SELECT u.id_usuario, u.nombre, u.apellido, u.id_rol, r.nombre_rol AS rol,
+            u.correo, u.telefono,
+            est.matricula, est.carrera, est.semestre, est.competencias,
+            emp.razon_social, emp.giro, emp.contacto,
+            prof.departamento, prof.asignaturas
      FROM usuarios u
      JOIN roles r ON u.id_rol = r.id_rol
-     WHERE u.telefono = ? AND u.estado = 'activo'
+     LEFT JOIN estudiantes est ON est.id_usuario = u.id_usuario
+     LEFT JOIN empresas emp    ON emp.id_usuario = u.id_usuario
+     LEFT JOIN profesores prof ON prof.id_profesor = u.id_usuario
+     WHERE (u.telefono = ? OR u.telefono = ?) AND u.estado = 'activo'
      LIMIT 1`,
-    [telefono]
+    [telefono, telefonoLimpio]
   );
-  return rows[0] || null;
+  const usuario = rows[0] || null;
+  setCachedUser(telefono, usuario);
+  return usuario;
 }
 
 // Proyectos del estudiante
@@ -218,35 +294,43 @@ async function buscarEstudiantesPorTecnologia(tecnologia, db) {
   return rows;
 }
 
-// Documento institucional desde BD (tabla chatbot_config)
-// El admin lo actualiza desde la web sin hacer deploy
+// Documento institucional — cacheado en memoria (se refresca cada 10 min)
+let docCache = { texto: null, ts: 0 };
+const DOC_CACHE_TTL = 600_000; // 10 minutos
+
 async function obtenerDocumentoInstitucional(db) {
+  if (docCache.texto && Date.now() - docCache.ts < DOC_CACHE_TTL) {
+    return docCache.texto;
+  }
+
   try {
     const [rows] = await db.execute(
       `SELECT valor FROM chatbot_config WHERE clave = 'documento_institucional' LIMIT 1`
     );
-    if (rows[0]?.valor) return rows[0].valor;
+    if (rows[0]?.valor) {
+      docCache = { texto: rows[0].valor, ts: Date.now() };
+      return docCache.texto;
+    }
   } catch (e) {
     logger.warn("No se pudo leer chatbot_config, usando archivo local:", e.message);
   }
 
-  // Fallback: lee el archivo .md local si la BD no tiene el documento
+  // Fallback: archivo .md local
   const rutaDoc = path.join(__dirname, "documento_institucional.md");
-  if (fs.existsSync(rutaDoc)) return fs.readFileSync(rutaDoc, "utf8");
+  if (fs.existsSync(rutaDoc)) {
+    docCache = { texto: fs.readFileSync(rutaDoc, "utf8"), ts: Date.now() };
+    return docCache.texto;
+  }
 
   return "Eres el asistente virtual de SkillMatch de la UTEQ. Responde en espanol mexicano, breve y amable.";
 }
 
-// Guardar log de interaccion en tabla chatbot
-async function guardarLog(pregunta, respuesta, categoria, id_usuario, db) {
-  try {
-    await db.execute(
-      `INSERT INTO chatbot (pregunta, respuesta, categoria) VALUES (?, ?, ?)`,
-      [pregunta.substring(0, 255), respuesta.substring(0, 500), categoria]
-    );
-  } catch (e) {
-    logger.warn("No se pudo guardar log:", e.message);
-  }
+// Guardar log — fire-and-forget (no bloquea la respuesta al usuario)
+function guardarLog(pregunta, respuesta, categoria, id_usuario, db) {
+  db.execute(
+    `INSERT INTO chatbot (pregunta, respuesta, categoria) VALUES (?, ?, ?)`,
+    [pregunta.substring(0, 255), respuesta.substring(0, 500), categoria]
+  ).catch((e) => logger.warn("No se pudo guardar log:", e.message));
 }
 
 // =========================================================
@@ -258,8 +342,8 @@ async function preguntarAClaude(pregunta, apiKey, db) {
   const response = await axios.post(
     "https://api.anthropic.com/v1/messages",
     {
-      model:      "claude-sonnet-4-20250514",
-      max_tokens: 400,
+      model:      "claude-3-5-haiku-20241022",  // Haiku: 3-5x mas rapido que Sonnet
+      max_tokens: 300,
       system:     DOCUMENTO,
       messages:   [{ role: "user", content: pregunta }],
     },
@@ -269,7 +353,7 @@ async function preguntarAClaude(pregunta, apiKey, db) {
         "anthropic-version": "2023-06-01",
         "Content-Type":      "application/json",
       },
-      timeout: 20000,
+      timeout: 15000,
     }
   );
 
@@ -282,7 +366,11 @@ async function preguntarAClaude(pregunta, apiKey, db) {
 // =========================================================
 const userState = {};
 
+// Intenciones que NECESITAN identificar al usuario en BD
+const INTENTS_NEED_USER = new Set(["mis_proyectos", "buscar_matching"]);
+
 async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
+  const t0 = Date.now();
   const estado = userState[from] || "inicio";
 
   let seleccionId = null;
@@ -299,6 +387,22 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     return;
   }
 
+  // ── Funcion lazy: identifica usuario solo cuando se necesite ──
+  let usuario = getCachedUser(from); // del cache si existe (no va a BD)
+  if (usuario === undefined) usuario = null; // no cacheado aun
+
+  async function requireUsuario() {
+    if (usuario) return usuario;
+    try {
+      const t = Date.now();
+      usuario = await identificarUsuario(from, db);
+      logger.info(`[TIMING] identificarUsuario: ${Date.now() - t}ms`);
+    } catch (e) {
+      logger.warn("No se pudo identificar usuario:", e.message);
+    }
+    return usuario;
+  }
+
   // ── Estado: esperando si/no ───────────────────────────
   if (estado === "esperando_cierre") {
     if (
@@ -307,14 +411,17 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       textoLibre?.toLowerCase() === "salir"
     ) {
       delete userState[from];
-      await sendWhatsAppText({
-        to: from, token, phoneNumberId,
-        text: "Gracias por usar *SkillMatch*. Exito en tu estadia!",
-      });
+      const nombre = usuario?.nombre?.split(" ")[0];
+      const despedida = nombre
+        ? `Gracias *${nombre}* por usar *SkillMatch*. Exito en tu estadia!`
+        : "Gracias por usar *SkillMatch*. Exito en tu estadia!";
+      await sendWhatsAppText({ to: from, token, phoneNumberId, text: despedida });
+      logger.info(`[TIMING] total cierre_no: ${Date.now() - t0}ms`);
       return;
     }
     userState[from] = "menu";
-    await enviarMenu({ to: from, token, phoneNumberId });
+    await enviarMenu({ to: from, token, phoneNumberId, usuario });
+    logger.info(`[TIMING] total cierre_si: ${Date.now() - t0}ms`);
     return;
   }
 
@@ -364,7 +471,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       }
     }
 
-    await guardarLog(
+    guardarLog(
       `Busqueda matching: ${textoLibre}`,
       respuesta,
       "buscar_matching",
@@ -408,22 +515,14 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     });
 
   } else {
-    await enviarMenu({ to: from, token, phoneNumberId });
+    await enviarMenu({ to: from, token, phoneNumberId, usuario });
     return;
   }
 
   if (necesitaMenu) {
     userState[from] = "menu";
-    await enviarMenu({ to: from, token, phoneNumberId });
+    await enviarMenu({ to: from, token, phoneNumberId, usuario });
     return;
-  }
-
-  // Identificar usuario en BD
-  let usuario = null;
-  try {
-    usuario = await identificarUsuario(from, db);
-  } catch (e) {
-    logger.warn("No se pudo identificar usuario:", e.message);
   }
 
   // =========================================================
@@ -433,69 +532,68 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
 
     // ── FECHAS ──────────────────────────────────────────────
     case "fechas": {
-      // Intenta leer fechas dinamicas desde chatbot_config
-      let texto = "";
-      try {
-        const [rows] = await db.execute(
-          `SELECT valor FROM chatbot_config WHERE clave = 'fechas_estadia' LIMIT 1`
-        );
-        if (rows[0]?.valor) {
-          texto = rows[0].valor;
-        }
-      } catch { /* usa texto estatico */ }
+      const TEXTO_FECHAS_DEFAULT =
+        "*Fechas de estadia Mayo-Agosto 2026:*\n\n" +
+        "• *Elegir empresa:* hasta el 15 de abril 2026\n" +
+        "• *Entregar CV:* hasta el 21 de abril 2026\n" +
+        "• *Inicio de estadia:* 4 de mayo 2026\n" +
+        "• *Talleres:* junio, julio y agosto\n" +
+        "• *Fin de estadia:* 31 de agosto 2026\n\n" +
+        "_Si no tienes empresa, envia tu CV antes del 21 de abril para que la universidad te asigne una._";
 
-      if (!texto) {
-        texto =
-          "*Fechas de estadia Mayo-Agosto 2026:*\n\n" +
-          "• *Elegir empresa:* hasta el 15 de abril 2026\n" +
-          "• *Entregar CV:* hasta el 21 de abril 2026\n" +
-          "• *Inicio de estadia:* 4 de mayo 2026\n" +
-          "• *Talleres:* junio, julio y agosto\n" +
-          "• *Fin de estadia:* 31 de agosto 2026\n\n" +
-          "_Si no tienes empresa, envia tu CV antes del 21 de abril para que la universidad te asigne una._";
-      }
+      // Usa texto estatico directo (sin esperar BD)
+      // El admin puede actualizar chatbot_config, se lee en background para proxima vez
+      let texto = configCache.get("fechas_estadia") || TEXTO_FECHAS_DEFAULT;
 
-      await guardarLog(textoLibre || "opcion_fechas", texto, "fechas", usuario?.id_usuario || null, db);
+      // Refresca cache en background (no bloquea respuesta)
+      db.execute(`SELECT valor FROM chatbot_config WHERE clave = 'fechas_estadia' LIMIT 1`)
+        .then(([rows]) => { if (rows[0]?.valor) configCache.set("fechas_estadia", rows[0].valor); })
+        .catch(() => {});
+
+      guardarLog(textoLibre || "opcion_fechas", texto, "fechas", usuario?.id_usuario || null, db);
       userState[from] = "esperando_cierre";
       await enviarRespuestaConCierre({ to: from, token, phoneNumberId, textoRespuesta: texto });
+      logger.info(`[TIMING] total fechas: ${Date.now() - t0}ms`);
       break;
     }
 
     // ── HORARIOS ────────────────────────────────────────────
     case "horarios": {
-      let texto =
+      const BASE_HORARIOS =
         "*Horarios de atencion:*\n\n" +
         "*Servicios Escolares:*\nLun-Vie: 9:00-14:00 y 16:00-18:00\n\n" +
         "*Vinculacion:*\nLun-Vie: 9:00-15:00\nUbicacion: Edificio principal, planta baja\n\n";
 
-      try {
-        const [rows] = await db.execute(
-          `SELECT h.titulo, h.descripcion
-           FROM horarios_profesores h
-           JOIN profesores p ON h.id_profesor = p.id_profesor
-           ORDER BY h.fecha_subida DESC
-           LIMIT 4`
-        );
-        if (rows.length > 0) {
-          texto += "*Horarios de profesores:*\n";
-          for (const h of rows) {
-            texto += `• ${h.titulo}: ${h.descripcion || "ver plataforma"}\n`;
-          }
-        } else {
-          texto += "*Profesores:* Consulta el directorio completo en la plataforma SkillMatch.";
-        }
-      } catch {
-        texto += "*Profesores:* Consulta el directorio completo en la plataforma SkillMatch.";
-      }
+      // Usa cache si existe, sino texto base
+      let texto = configCache.get("horarios_full") || (BASE_HORARIOS +
+        "*Profesores:* Consulta el directorio completo en la plataforma SkillMatch.");
 
-      await guardarLog(textoLibre || "opcion_horarios", texto, "horarios", usuario?.id_usuario || null, db);
+      // Refresca horarios de profesores en background
+      db.execute(
+        `SELECT h.titulo, h.descripcion FROM horarios_profesores h
+         JOIN profesores p ON h.id_profesor = p.id_profesor
+         ORDER BY h.fecha_subida DESC LIMIT 4`
+      ).then(([rows]) => {
+        let full = BASE_HORARIOS;
+        if (rows.length > 0) {
+          full += "*Horarios de profesores:*\n";
+          for (const h of rows) full += `• ${h.titulo}: ${h.descripcion || "ver plataforma"}\n`;
+        } else {
+          full += "*Profesores:* Consulta el directorio completo en la plataforma SkillMatch.";
+        }
+        configCache.set("horarios_full", full);
+      }).catch(() => {});
+
+      guardarLog(textoLibre || "opcion_horarios", texto, "horarios", usuario?.id_usuario || null, db);
       userState[from] = "esperando_cierre";
       await enviarRespuestaConCierre({ to: from, token, phoneNumberId, textoRespuesta: texto });
+      logger.info(`[TIMING] total horarios: ${Date.now() - t0}ms`);
       break;
     }
 
     // ── MIS PROYECTOS ────────────────────────────────────────
     case "mis_proyectos": {
+      await requireUsuario();
       if (!usuario) {
         const texto =
           "Para ver tus proyectos necesito identificarte.\n\n" +
@@ -527,14 +625,16 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
         texto += "\n";
       }
 
-      await guardarLog(textoLibre || "opcion_proyectos", texto, "mis_proyectos", usuario.id_usuario, db);
+      guardarLog(textoLibre || "opcion_proyectos", texto, "mis_proyectos", usuario.id_usuario, db);
       userState[from] = "esperando_cierre";
       await enviarRespuestaConCierre({ to: from, token, phoneNumberId, textoRespuesta: texto });
+      logger.info(`[TIMING] total mis_proyectos: ${Date.now() - t0}ms`);
       break;
     }
 
     // ── BUSCAR MATCHING ──────────────────────────────────────
     case "buscar_matching": {
+      await requireUsuario();
       userState[from]              = "esperando_tecnologia";
       userState[`${from}_usuario`] = usuario;
 
@@ -560,16 +660,11 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
           "Telefono UTEQ: (442) 209 6100";
       }
 
-      await guardarLog(
-        textoLibre || "faq",
-        respuesta,
-        "faq",
-        usuario?.id_usuario || null,
-        db
-      );
+      guardarLog(textoLibre || "faq", respuesta, "faq", usuario?.id_usuario || null, db);
 
       userState[from] = "esperando_cierre";
       await enviarRespuestaConCierre({ to: from, token, phoneNumberId, textoRespuesta: respuesta });
+      logger.info(`[TIMING] total faq: ${Date.now() - t0}ms`);
       break;
     }
 
@@ -584,12 +679,32 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
 }
 
 // =========================================================
+// DEDUPLICACION: evita procesar el mismo mensaje varias veces
+// (Meta reintenta el webhook si no recibe 200 rapido)
+// =========================================================
+const processedMessages = new Map();
+const DEDUP_TTL_MS = 120_000; // 2 minutos
+
+function yaProcesado(msgId) {
+  // Limpia entradas viejas
+  const ahora = Date.now();
+  for (const [id, ts] of processedMessages) {
+    if (ahora - ts > DEDUP_TTL_MS) processedMessages.delete(id);
+  }
+  if (processedMessages.has(msgId)) return true;
+  processedMessages.set(msgId, ahora);
+  return false;
+}
+
+// =========================================================
 // WEBHOOK PRINCIPAL
 // =========================================================
 export const whatsappWebhookSkillMatch = onRequest(
   {
     cors:    true,
     region:  "us-central1",
+    minInstances: 1,        // Mantiene 1 instancia activa = sin cold start
+    memory:       "256MiB",
     secrets: [
       VERIFY_TOKEN,
       WHATSAPP_TOKEN,
@@ -621,32 +736,35 @@ export const whatsappWebhookSkillMatch = onRequest(
     }
 
     // POST: mensajes entrantes
+    // ── Responder 200 INMEDIATAMENTE para que Meta no reintente ──
+    res.sendStatus(200);
+
     try {
       const body = req.body;
       logger.info("Webhook body", body);
 
       const statuses = body?.entry?.[0]?.changes?.[0]?.value?.statuses;
-      if (Array.isArray(statuses) && statuses.length) return res.sendStatus(200);
+      if (Array.isArray(statuses) && statuses.length) return;
 
       const messages = body?.entry?.[0]?.changes?.[0]?.value?.messages;
       const from     = messages?.[0]?.from;
-      if (!messages || !from) return res.sendStatus(200);
+      if (!messages || !from) return;
+
+      const msg = messages[0];
+      if (!msg || (msg.type !== "text" && msg.type !== "interactive")) return;
+
+      // ── Deduplicar: si ya procesamos este mensaje, ignorar ──
+      if (yaProcesado(msg.id)) {
+        logger.info("Mensaje duplicado ignorado:", msg.id);
+        return;
+      }
 
       const token         = cfg.WHATSAPP_TOKEN;
       const phoneNumberId = cfg.WHATSAPP_PHONE_NUMBER_ID;
-      const msg           = messages[0];
-
-      if (!msg || (msg.type !== "text" && msg.type !== "interactive")) {
-        return res.sendStatus(200);
-      }
-
       const db = getPool(cfg);
       await handleMessage({ from, msg, token, phoneNumberId, cfg, db });
-
-      return res.sendStatus(200);
     } catch (err) {
       logger.error("Error webhook:", err?.response?.data || err);
-      return res.sendStatus(200);
     }
   }
 );
