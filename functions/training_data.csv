@@ -98,6 +98,16 @@ no entendí,menu
 regresar,menu
 volver al menú,menu
 qué empresas buscan desarrolladores,buscar_matching
+mis postulaciones,mis_postulaciones_vacantes
+en qué estado están mis postulaciones,mis_postulaciones_vacantes
+quiero ver mis aplicaciones,mis_postulaciones_vacantes
+a cuáles vacantes apliqué,mis_postulaciones_vacantes
+cómo va mi postulación,mis_postulaciones_vacantes
+estado de mis postulaciones,mis_postulaciones_vacantes
+me aceptaron en alguna vacante,mis_postulaciones_vacantes
+en qué voy con las vacantes,mis_postulaciones_vacantes
+quiero saber si me aceptaron,mis_postulaciones_vacantes
+resultados de mis postulaciones,mis_postulaciones_vacantes
 empresas que necesiten react,buscar_matching
 hay empresas que busquen node js,buscar_matching
 qué empresas buscan alumnos de software,buscar_matching

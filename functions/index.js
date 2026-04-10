@@ -133,7 +133,8 @@ const MENU_SECTIONS = [
       { id: "opcion_faq",       title: "Preguntas frecuentes", description: "Dudas sobre la estadia" },
       { id: "opcion_profes",    title: "Profesores",           description: "Horarios de profesores" },
       { id: "opcion_proyectos", title: "Mis proyectos",        description: "Tus proyectos en SkillMatch" },
-      { id: "opcion_matching",  title: "Buscar vacantes",      description: "Empresas o estudiantes" },
+      { id: "opcion_matching",       title: "Buscar vacantes",      description: "Vacantes abiertas para aplicar" },
+      { id: "opcion_postulaciones",  title: "Mis postulaciones",    description: "Estado de tus aplicaciones" },
     ],
   },
 ];
@@ -228,7 +229,7 @@ async function identificarUsuario(telefono, db) {
   const [rows] = await db.execute(
     `SELECT u.id_usuario, u.nombre, u.apellido, u.id_rol, r.nombre_rol AS rol,
             u.correo, u.telefono,
-            est.matricula, est.carrera, est.semestre, est.competencias,
+            est.id_estudiante, est.matricula, est.carrera, est.semestre, est.competencias,
             emp.razon_social, emp.giro, emp.contacto,
             prof.departamento, prof.asignaturas
      FROM usuarios u
@@ -258,22 +259,34 @@ async function obtenerProyectosEstudiante(id_usuario, db) {
   return rows;
 }
 
-// Vacantes abiertas filtradas por tecnologia (para estudiantes)
-// Usa la tabla vacantes real de tu BD
-async function buscarVacantesPorTecnologia(tecnologia, db) {
+// Vacantes abiertas (todas, para mostrar al estudiante)
+async function obtenerVacantesAbiertas(db) {
   const [rows] = await db.execute(
-    `SELECT v.titulo, v.categoria, v.nivel, v.descripcion,
-            e.razon_social, e.giro, e.contacto
+    `SELECT v.id_vacante, v.titulo, v.categoria, v.nivel, v.descripcion,
+            emp.razon_social, emp.contacto
      FROM vacantes v
-     JOIN empresas e ON v.id_empresa = e.id_empresa
-     WHERE (v.requisitos LIKE CONCAT('%', ?, '%')
-         OR v.descripcion LIKE CONCAT('%', ?, '%')
-         OR v.titulo LIKE CONCAT('%', ?, '%'))
-       AND v.estado = 'abierta'
-     LIMIT 5`,
-    [tecnologia, tecnologia, tecnologia]
+     JOIN empresas emp ON v.id_empresa = emp.id_empresa
+     WHERE v.estado = 'abierta'
+     ORDER BY v.fecha_registro DESC
+     LIMIT 10`
   );
   return rows;
+}
+
+// Crear postulacion del estudiante a una vacante
+async function crearPostulacion(id_vacante, id_estudiante, db) {
+  // Verifica si ya existe
+  const [existing] = await db.execute(
+    `SELECT id_postulacion FROM postulaciones WHERE id_vacante = ? AND id_estudiante = ? LIMIT 1`,
+    [id_vacante, id_estudiante]
+  );
+  if (existing.length > 0) return { ya_existe: true };
+
+  await db.execute(
+    `INSERT INTO postulaciones (id_vacante, id_estudiante, estado) VALUES (?, ?, 'pendiente')`,
+    [id_vacante, id_estudiante]
+  );
+  return { ya_existe: false };
 }
 
 // Estudiantes con proyectos en cierta tecnologia (para empresas)
@@ -290,6 +303,21 @@ async function buscarEstudiantesPorTecnologia(tecnologia, db) {
      GROUP BY u.id_usuario
      LIMIT 5`,
     [tecnologia]
+  );
+  return rows;
+}
+
+// Postulaciones del estudiante (usa tabla postulaciones)
+async function obtenerPostulacionesEstudiante(id_estudiante, db) {
+  const [rows] = await db.execute(
+    `SELECT v.titulo, emp.razon_social, po.estado, po.fecha_postulacion
+     FROM postulaciones po
+     JOIN vacantes v   ON po.id_vacante  = v.id_vacante
+     JOIN empresas emp ON v.id_empresa   = emp.id_empresa
+     WHERE po.id_estudiante = ?
+     ORDER BY po.fecha_postulacion DESC
+     LIMIT 5`,
+    [id_estudiante]
   );
   return rows;
 }
@@ -425,63 +453,136 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     return;
   }
 
-  // ── Estado: esperando tecnologia para matching ────────
-  if (estado === "esperando_tecnologia") {
-    if (!textoLibre) {
+  // ── Estado: esperando que seleccione una vacante de la lista ──
+  if (estado === "esperando_seleccion_vacante") {
+    const vacId = seleccionId?.startsWith("vacante_") ? seleccionId.replace("vacante_", "") : null;
+
+    if (!vacId) {
       await sendWhatsAppText({
         to: from, token, phoneNumberId,
-        text: "Por favor escribe la tecnologia o puesto que buscas\n(ej: React, Python, Node.js, Java...)",
+        text: "Por favor selecciona una vacante de la lista.",
       });
       return;
     }
 
-    const usuario = userState[`${from}_usuario`];
-    let respuesta = "";
-
-    if (usuario?.rol === "empresa") {
-      // Empresa busca estudiantes con proyectos en esa tecnologia
-      const estudiantes = await buscarEstudiantesPorTecnologia(textoLibre, db);
-      if (estudiantes.length === 0) {
-        respuesta =
-          `No encontre estudiantes con proyectos en *${textoLibre}* por el momento.\n\n` +
-          `Puedes publicar una vacante en SkillMatch para que los estudiantes te contacten.`;
-      } else {
-        respuesta = `*Estudiantes con proyectos en ${textoLibre}:*\n\n`;
-        for (const e of estudiantes) {
-          respuesta += `• *${e.nombre} ${e.apellido}*\n`;
-          respuesta += `  Carrera: ${e.carrera}\n`;
-          respuesta += `  Proyectos: ${e.proyectos}\n\n`;
-        }
-      }
-    } else {
-      // Estudiante busca vacantes en esa tecnologia
-      const vacantes = await buscarVacantesPorTecnologia(textoLibre, db);
-      if (vacantes.length === 0) {
-        respuesta =
-          `No encontre vacantes abiertas relacionadas con *${textoLibre}* en este momento.\n\n` +
-          `Acude a Vinculacion para mas opciones de empresas disponibles.`;
-      } else {
-        respuesta = `*Vacantes disponibles relacionadas con ${textoLibre}:*\n\n`;
-        for (const v of vacantes) {
-          respuesta += `• *${v.titulo}* — ${v.razon_social}\n`;
-          respuesta += `  Nivel: ${v.nivel} | Area: ${v.categoria}\n`;
-          respuesta += `  Contacto: ${v.contacto || "ver plataforma"}\n\n`;
-        }
-        respuesta += `_Para postularte, ingresa a la plataforma SkillMatch._`;
-      }
-    }
-
-    guardarLog(
-      `Busqueda matching: ${textoLibre}`,
-      respuesta,
-      "buscar_matching",
-      usuario?.id_usuario || null,
-      db
+    // Busca los datos de la vacante seleccionada
+    const db2 = getPool(cfg);
+    const [rows] = await db2.execute(
+      `SELECT v.id_vacante, v.titulo, v.nivel, v.categoria, v.descripcion,
+              emp.razon_social, emp.contacto
+       FROM vacantes v
+       JOIN empresas emp ON v.id_empresa = emp.id_empresa
+       WHERE v.id_vacante = ? AND v.estado = 'abierta'
+       LIMIT 1`,
+      [vacId]
     );
 
-    delete userState[`${from}_usuario`];
-    userState[from] = "esperando_cierre";
-    await enviarRespuestaConCierre({ to: from, token, phoneNumberId, textoRespuesta: respuesta });
+    if (rows.length === 0) {
+      userState[from] = "esperando_cierre";
+      await enviarRespuestaConCierre({
+        to: from, token, phoneNumberId,
+        textoRespuesta: "Esa vacante ya no esta disponible.",
+      });
+      return;
+    }
+
+    const vacante = rows[0];
+
+    // Guardar la vacante seleccionada y pedir confirmacion
+    userState[from] = "esperando_confirmar_postulacion";
+    userState[`${from}_vacante`] = vacante;
+
+    const detalle =
+      `*${vacante.titulo}*\n` +
+      `Empresa: ${vacante.razon_social}\n` +
+      `Nivel: ${vacante.nivel} | Area: ${vacante.categoria}\n` +
+      (vacante.descripcion ? `Descripcion: ${vacante.descripcion}\n` : "") +
+      (vacante.contacto ? `Contacto: ${vacante.contacto}\n` : "");
+
+    await sendWhatsAppButtons({
+      to: from, token, phoneNumberId,
+      bodyText: detalle + "\n¿Deseas postularte a esta vacante?",
+      buttons: [
+        { id: "postular_si", title: "Si, postularme" },
+        { id: "postular_no", title: "No, regresar" },
+      ],
+    });
+    return;
+  }
+
+  // ── Estado: confirmar postulacion ──
+  if (estado === "esperando_confirmar_postulacion") {
+    const vacante  = userState[`${from}_vacante`];
+    const usuarioP = userState[`${from}_usuario_postulacion`];
+
+    if (seleccionId === "postular_no" || textoLibre?.toLowerCase() === "no") {
+      delete userState[`${from}_vacante`];
+      delete userState[`${from}_usuario_postulacion`];
+      userState[from] = "esperando_cierre";
+      await enviarRespuestaConCierre({
+        to: from, token, phoneNumberId,
+        textoRespuesta: "De acuerdo, no se realizo la postulacion.",
+      });
+      return;
+    }
+
+    if (seleccionId === "postular_si" || textoLibre?.toLowerCase() === "si") {
+      if (!usuarioP?.id_estudiante || !vacante?.id_vacante) {
+        delete userState[`${from}_vacante`];
+        delete userState[`${from}_usuario_postulacion`];
+        userState[from] = "esperando_cierre";
+        await enviarRespuestaConCierre({
+          to: from, token, phoneNumberId,
+          textoRespuesta: "No fue posible completar la postulacion. Asegurate de estar registrado en SkillMatch.",
+        });
+        return;
+      }
+
+      try {
+        const db2 = getPool(cfg);
+        const resultado = await crearPostulacion(vacante.id_vacante, usuarioP.id_estudiante, db2);
+
+        let textoResp;
+        if (resultado.ya_existe) {
+          textoResp = `Ya te habias postulado a *${vacante.titulo}* en *${vacante.razon_social}*.\n\nPuedes ver el estado de tus postulaciones desde la plataforma SkillMatch.`;
+        } else {
+          textoResp = `✅ Te has postulado exitosamente a *${vacante.titulo}* en *${vacante.razon_social}*.\n\nEstado: ⏳ Pendiente\nLa empresa revisara tu perfil y proyectos en SkillMatch.`;
+        }
+
+        guardarLog(
+          `Postulacion: ${vacante.titulo}`,
+          textoResp,
+          "buscar_matching",
+          usuarioP.id_usuario || null,
+          db2
+        );
+
+        delete userState[`${from}_vacante`];
+        delete userState[`${from}_usuario_postulacion`];
+        userState[from] = "esperando_cierre";
+        await enviarRespuestaConCierre({ to: from, token, phoneNumberId, textoRespuesta: textoResp });
+      } catch (e) {
+        logger.error("Error al crear postulacion:", e.message);
+        delete userState[`${from}_vacante`];
+        delete userState[`${from}_usuario_postulacion`];
+        userState[from] = "esperando_cierre";
+        await enviarRespuestaConCierre({
+          to: from, token, phoneNumberId,
+          textoRespuesta: "Hubo un error al procesar tu postulacion. Intenta desde la plataforma web de SkillMatch.",
+        });
+      }
+      return;
+    }
+
+    // Si no respondio si/no
+    await sendWhatsAppButtons({
+      to: from, token, phoneNumberId,
+      bodyText: "¿Deseas postularte a esta vacante?",
+      buttons: [
+        { id: "postular_si", title: "Si, postularme" },
+        { id: "postular_no", title: "No, regresar" },
+      ],
+    });
     return;
   }
 
@@ -494,7 +595,8 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     opcion_faq:       "faq",
     opcion_profes:    "horarios",
     opcion_proyectos: "mis_proyectos",
-    opcion_matching:  "buscar_matching",
+    opcion_matching:       "buscar_matching",
+    opcion_postulaciones:  "mis_postulaciones_vacantes",
   };
 
   let intencion;
@@ -635,14 +737,102 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     // ── BUSCAR MATCHING ──────────────────────────────────────
     case "buscar_matching": {
       await requireUsuario();
-      userState[from]              = "esperando_tecnologia";
-      userState[`${from}_usuario`] = usuario;
 
-      const prompt = usuario?.rol === "empresa"
-        ? "*Busqueda de talento*\n\nEscribe la tecnologia o habilidad que buscas en los candidatos:\n(ej: React, Python, Node.js, Java, MySQL...)"
-        : "*Busqueda de vacantes*\n\nEscribe la tecnologia o puesto que te interesa:\n(ej: React, Python, Node.js, Java, MySQL...)";
+      if (!usuario || usuario.rol !== "estudiante" || !usuario.id_estudiante) {
+        userState[from] = "esperando_cierre";
+        await enviarRespuestaConCierre({
+          to: from, token, phoneNumberId,
+          textoRespuesta:
+            "Para ver vacantes y postularte necesito identificarte como estudiante.\n\n" +
+            "Asegurate de que tu numero de WhatsApp este registrado en tu perfil de SkillMatch.",
+        });
+        break;
+      }
 
-      await sendWhatsAppText({ to: from, token, phoneNumberId, text: prompt });
+      // Obtener vacantes abiertas y mostrarlas como lista interactiva
+      const vacantes = await obtenerVacantesAbiertas(db);
+
+      if (vacantes.length === 0) {
+        userState[from] = "esperando_cierre";
+        await enviarRespuestaConCierre({
+          to: from, token, phoneNumberId,
+          textoRespuesta: "No hay vacantes disponibles en este momento.\n\nAcude a Vinculacion para mas opciones.",
+        });
+        break;
+      }
+
+      // Construir lista interactiva de WhatsApp (max 10 rows)
+      const rows = vacantes.map((v) => ({
+        id:          `vacante_${v.id_vacante}`,
+        title:       v.titulo.substring(0, 24),
+        description: `${v.razon_social} | ${v.nivel}`.substring(0, 72),
+      }));
+
+      userState[from] = "esperando_seleccion_vacante";
+      userState[`${from}_usuario_postulacion`] = usuario;
+
+      await sendWhatsAppList({
+        to: from, token, phoneNumberId,
+        headerText: "Vacantes disponibles",
+        bodyText:   `*${usuario.nombre}*, estas son las vacantes abiertas.\nSelecciona una para ver el detalle y postularte.`,
+        buttonText: "Ver vacantes",
+        sections:   [{ title: "Vacantes abiertas", rows }],
+      });
+
+      guardarLog(textoLibre || "opcion_matching", `Mostrando ${vacantes.length} vacantes`, "buscar_matching", usuario.id_usuario, db);
+      logger.info(`[TIMING] total buscar_matching: ${Date.now() - t0}ms`);
+      break;
+    }
+
+    // ── MIS POSTULACIONES ─────────────────────────────────────
+    case "mis_postulaciones_vacantes": {
+      await requireUsuario();
+
+      if (!usuario || usuario.rol !== "estudiante" || !usuario.id_estudiante) {
+        userState[from] = "esperando_cierre";
+        await enviarRespuestaConCierre({
+          to: from, token, phoneNumberId,
+          textoRespuesta:
+            "Para ver tus postulaciones necesito identificarte como estudiante.\n\n" +
+            "Asegurate de que tu numero de WhatsApp este registrado en tu perfil de SkillMatch.",
+        });
+        break;
+      }
+
+      const postulaciones = await obtenerPostulacionesEstudiante(usuario.id_estudiante, db);
+
+      if (postulaciones.length === 0) {
+        userState[from] = "esperando_cierre";
+        await enviarRespuestaConCierre({
+          to: from, token, phoneNumberId,
+          textoRespuesta:
+            `*${usuario.nombre}*, aun no te has postulado a ninguna vacante.\n\n` +
+            `Selecciona *Buscar vacantes* en el menu para ver las vacantes disponibles y aplicar.`,
+        });
+        break;
+      }
+
+      const estadoMap = {
+        pendiente:   "⏳ Pendiente",
+        en_revision: "🔍 En revision",
+        aceptado:    "✅ Aceptado",
+        rechazado:   "❌ Rechazado",
+      };
+
+      let texto = `*Tus postulaciones, ${usuario.nombre}:*\n\n`;
+      for (const po of postulaciones) {
+        const fecha = new Date(po.fecha_postulacion).toLocaleDateString("es-MX", {
+          day: "numeric", month: "short", year: "numeric",
+        });
+        texto += `• *${po.titulo}* — ${po.razon_social}\n`;
+        texto += `  Estado: ${estadoMap[po.estado] || po.estado}\n`;
+        texto += `  Fecha: ${fecha}\n\n`;
+      }
+
+      guardarLog(textoLibre || "opcion_postulaciones", texto, "mis_postulaciones", usuario.id_usuario, db);
+      userState[from] = "esperando_cierre";
+      await enviarRespuestaConCierre({ to: from, token, phoneNumberId, textoRespuesta: texto });
+      logger.info(`[TIMING] total mis_postulaciones: ${Date.now() - t0}ms`);
       break;
     }
 
