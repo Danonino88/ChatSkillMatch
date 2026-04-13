@@ -55,16 +55,25 @@ export function clasificar(textoOriginal) {
 
   const texto = textoOriginal.toLowerCase().trim();
 
-  // Naive Bayes elige siempre la categoria mas probable
-  const intencion = classifier.classify(texto);
+  // Obtener clasificaciones con score para medir confianza
+  const clasificaciones = classifier.getClassifications(texto);
+  const top = clasificaciones[0];
+  const segundo = clasificaciones[1];
+
+  const intencion = top?.label || "menu";
+  const topScore = top?.value || 0;
+  const gap = segundo ? topScore - segundo.value : topScore;
+
+  // Confianza baja: scores muy parejos o top muy bajo
+  const confianzaBaja = gap < 0.15 && texto.split(" ").length > 1;
 
   // Solo muestra menu si el modelo clasifico como "menu"
   // y el texto es muy corto (saludo de una palabra)
   const necesitaMenu = intencion === "menu" && texto.split(" ").length <= 1;
 
   return {
-    intencion,
-    confianza: 1,
+    intencion: confianzaBaja ? "no_entendido" : intencion,
+    confianza: confianzaBaja ? 0 : 1,
     necesitaMenu,
   };
 }
