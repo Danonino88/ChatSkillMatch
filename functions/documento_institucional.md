@@ -151,6 +151,8 @@ Debes notificarlo de inmediato a tu asesor de la UTEQ. Vinculación evaluará el
 - Trámites de titulación: maria.hernandez@uteq.edu.mx / alejandro.hernandez@uteq.edu.mx / ljimenez@uteq.edu.mx
 
 ---
+## Conoce tu nueva universidad!
+Ven al Halcón Tour, visita las áreas de la UTEQ, conoce la Oferta Educativa y las actividades extracurriculares a la que podrás inscribirte, te esperamos todos los miércolesa las 10:00 am en el Edificio Student Talent HUB.
 
 ## Instrucciones para Claude
 

@@ -42,7 +42,7 @@ function getPool(cfg) {
   if (!pool) {
     pool = mysql.createPool({
       host:             cfg.DB_HOST,
-      port:             4000,                          // TiDB Cloud Serverless
+      port:             46147,                         // Railway MySQL
       user:             cfg.DB_USER,
       password:         cfg.DB_PASSWORD,
       database:         cfg.DB_NAME,
@@ -50,8 +50,8 @@ function getPool(cfg) {
       connectionLimit:  5,
       queueLimit:       0,
       timezone:         "Z",
-      ssl:              { rejectUnauthorized: true },  // Requerido por TiDB Cloud
-      enableKeepAlive:  true,                          // Reutiliza conexiones TCP
+      ssl:              false,                         // Railway no requiere SSL estricto
+      enableKeepAlive:  true,
       keepAliveInitialDelay: 10000,
       connectTimeout:   10000,
     });
@@ -243,34 +243,57 @@ function generarOpcionesRelacionadas(intencion, usuario) {
 
 // Genera saludo personalizado segun rol
 function obtenerSaludo(usuario) {
+  const DESC_BOT =
+    "Soy tu asistente virtual de *SkillMatch* 🤖, la plataforma de vinculacion academica de la UTEQ. " +
+    "Aqui puedes consultar fechas, horarios, preguntas frecuentes, entre otras cosas.";
+
+  const EJEMPLOS =
+    "� *Desde el menu puedes:*\n" +
+    "• Ver fechas de estadia\n" +
+    "• Consultar horarios de Servicios Escolares y profesores\n" +
+    "• Buscar vacantes y postularte\n" +
+    "• Ver tus proyectos y postulaciones\n\n" +
+    "💡 *O escribeme directamente tus dudas:*\n" +
+    "• _¿Que pasa si no tengo empresa?_\n" +
+    "• _Requisitos para titulacion_\n" +
+    "• _¿Que obligaciones tengo en la estadia?_\n" +
+    "• _¿Donde esta ubicada la UTEQ?_\n" +
+    "• _¿A que hora atiende vinculacion?_\n" +
+    "• _¿Que es SkillMatch?_";
+
   if (!usuario) {
-    return "Bienvenido a *SkillMatch*!\n\n" +
-      "Lo sentimos, no logramos encontrar tu numero, pero te puedes registrar en:\n" +
-      "https://skillmatch-lkz9.onrender.com/\n" +
-      "para poder ver las opciones avanzadas.\n\n" +
-      "Mientras tanto, estas son las opciones disponibles:";
+    return `👋 *Bienvenido a SkillMatch*\n\n` +
+      `${DESC_BOT}\n\n` +
+      `No encontramos tu numero registrado. Puedes crear tu cuenta en:\n` +
+      `https://skillmatch-lkz9.onrender.com/\n\n` +
+      `${EJEMPLOS}\n\n` +
+      `Mientras tanto, estas son las opciones disponibles:`;
   }
 
   const nombre = usuario.nombre.split(" ")[0]; // primer nombre
   switch (usuario.rol) {
     case "estudiante":
-      return `Hola *${nombre}*! 👋\n` +
-        (usuario.carrera ? `Carrera: ${usuario.carrera}\n` : "") +
-        (usuario.semestre ? `Semestre: ${usuario.semestre}\n` : "") +
-        `\nQue deseas consultar?`;
+      return `👋 *Hola, ${nombre}!*\n\n` +
+        `${DESC_BOT}\n\n` +
+        (usuario.carrera ? `📚 *Carrera:* ${usuario.carrera}\n` : "") +
+        (usuario.semestre ? `🎓 *Semestre:* ${usuario.semestre}\n` : "") +
+        `\n${EJEMPLOS}\n\n¿Que deseas consultar?`;
     case "empresa":
-      return `Hola *${nombre}*! 👋\n` +
-        (usuario.razon_social ? `Empresa: ${usuario.razon_social}\n` : "") +
-        (usuario.giro ? `Giro: ${usuario.giro}\n` : "") +
-        `\nQue deseas consultar?`;
+      return `👋 *Hola, ${nombre}!*\n\n` +
+        `${DESC_BOT}\n\n` +
+        (usuario.razon_social ? `🏢 *Empresa:* ${usuario.razon_social}\n` : "") +
+        (usuario.giro ? `💼 *Giro:* ${usuario.giro}\n` : "") +
+        `\n${EJEMPLOS}\n\n¿Que deseas consultar?`;
     case "profesor":
-      return `Hola Profe *${nombre}*! 👋\n` +
-        (usuario.departamento ? `Depto: ${usuario.departamento}\n` : "") +
-        `\nQue deseas consultar?`;
+      return `👋 *Hola, Profe ${nombre}!*\n\n` +
+        `${DESC_BOT}\n\n` +
+        (usuario.departamento ? `🏫 *Depto:* ${usuario.departamento}\n` : "") +
+        `\n${EJEMPLOS}\n\n¿Que deseas consultar?`;
     case "admin":
-      return `Hola *${nombre}* (Admin)! 👋\nQue deseas consultar?`;
+      return `👋 *Hola, ${nombre}!* (Admin)\n\n` +
+        `${DESC_BOT}\n\n${EJEMPLOS}\n\n¿Que deseas consultar?`;
     default:
-      return `Hola *${nombre}*! Que deseas consultar?`;
+      return `👋 *Hola, ${nombre}!*\n\n${DESC_BOT}\n\n${EJEMPLOS}\n\n¿Que deseas consultar?`;
   }
 }
 
@@ -388,7 +411,18 @@ async function identificarUsuario(telefono, db) {
   const cached = getCachedUser(telefono);
   if (cached !== undefined) return cached;
 
-  const telefonoLimpio = telefono.replace(/^521/, "");
+  // Comparar solo los últimos 10 dígitos del teléfono
+  const soloDigitos = telefono.replace(/\D/g, "");
+  const ultimos10 = soloDigitos.slice(-10);
+
+  logger.info("🔍 identificarUsuario", { telefonoOriginal: telefono, soloDigitos, ultimos10 });
+
+  // Primero verificar qué teléfonos existen en la BD
+  const [todos] = await db.execute(
+    `SELECT id_usuario, nombre, telefono FROM usuarios WHERE telefono IS NOT NULL AND estado = 'activo'`
+  );
+  logger.info("📞 Teléfonos en BD:", todos.map(u => ({ id: u.id_usuario, nombre: u.nombre, tel: u.telefono })));
+
   const [rows] = await db.execute(
     `SELECT u.id_usuario, u.nombre, u.apellido, u.id_rol, r.nombre_rol AS rol,
             u.correo, u.telefono,
@@ -400,10 +434,13 @@ async function identificarUsuario(telefono, db) {
      LEFT JOIN estudiantes est ON est.id_usuario = u.id_usuario
      LEFT JOIN empresas emp    ON emp.id_usuario = u.id_usuario
      LEFT JOIN profesores prof ON prof.id_profesor = u.id_usuario
-     WHERE (u.telefono = ? OR u.telefono = ?) AND u.estado = 'activo'
+     WHERE RIGHT(u.telefono, 10) = ?
+       AND u.estado = 'activo'
      LIMIT 1`,
-    [telefono, telefonoLimpio]
+    [ultimos10]
   );
+  logger.info("✅ Resultado query:", { encontrado: rows.length > 0, usuario: rows[0]?.nombre || "ninguno" });
+
   const usuario = rows[0] || null;
   setCachedUser(telefono, usuario);
   return usuario;
@@ -763,8 +800,9 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
   const mapaMenu = {
     opcion_fechas:    "fechas",
     opcion_horarios:  "horarios",
+    opcion_horarios_escolares: "horarios_escolares",
+    opcion_horarios_profes:    "horarios_profes",
     opcion_faq:       "faq",
-    opcion_profes:    "horarios",
     opcion_proyectos: "mis_proyectos",
     opcion_matching:            "buscar_matching",
     opcion_postulaciones:       "mis_postulaciones_vacantes",
@@ -876,38 +914,72 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       break;
     }
 
-    // �"?�"? HORARIOS �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+    // ── HORARIOS (sub-menú) ──────────────────────────────────
     case "horarios": {
-      const BASE_HORARIOS =
-        "*Horarios de atencion:*\n\n" +
-        "*Servicios Escolares:*\nLun-Vie: 9:00-14:00 y 16:00-18:00\n\n" +
-        "*Vinculacion:*\nLun-Vie: 9:00-15:00\nUbicacion: Edificio principal, planta baja\n\n";
-
-      // Usa cache si existe, sino texto base
-      let texto = configCache.get("horarios_full") || (BASE_HORARIOS +
-        "*Profesores:* Consulta el directorio completo en la plataforma SkillMatch.");
-
-      // Refresca horarios de profesores en background
-      db.execute(
-        `SELECT h.titulo, h.descripcion FROM horarios_profesores h
-         JOIN profesores p ON h.id_profesor = p.id_profesor
-         ORDER BY h.fecha_subida DESC LIMIT 4`
-      ).then(([rows]) => {
-        let full = BASE_HORARIOS;
-        if (rows.length > 0) {
-          full += "*Horarios de profesores:*\n";
-          for (const h of rows) full += `• ${h.titulo}: ${h.descripcion || "ver plataforma"}\n`;
-        } else {
-          full += "*Profesores:* Consulta el directorio completo en la plataforma SkillMatch.";
-        }
-        configCache.set("horarios_full", full);
-      }).catch(() => {});
-
-      guardarLog(textoLibre || "opcion_horarios", texto, "horarios", usuario?.id_usuario || null, db);
+      await sendWhatsAppButtons({
+        to: from, token, phoneNumberId,
+        bodyText: "¿Que horarios deseas consultar?",
+        buttons: [
+          { id: "opcion_horarios_escolares", title: "Servicios Escolares" },
+          { id: "opcion_horarios_profes",    title: "Profesores" },
+          { id: "opcion_menu",               title: "Menu" },
+        ],
+      });
       registrarInteraccion(from, "horarios");
+      logger.info(`[TIMING] total horarios: ${Date.now() - t0}ms`);
+      break;
+    }
+
+    // ── HORARIOS SERVICIOS ESCOLARES ─────────────────────────
+    case "horarios_escolares": {
+      const texto =
+        "*Horarios de atencion:*\n\n" +
+        "🏫 *Servicios Escolares:*\n" +
+        "Lun-Vie: 9:00 - 14:00 y 16:00 - 18:00\n\n" +
+        "🤝 *Vinculacion:*\n" +
+        "Lun-Vie: 9:00 - 15:00\n" +
+        "Ubicacion: Edificio principal, planta baja\n\n" +
+        "📞 Telefono UTEQ: (442) 209 6100";
+
+      guardarLog(textoLibre || "opcion_horarios_escolares", texto, "horarios", usuario?.id_usuario || null, db);
       delete userState[from];
       await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "horarios", usuario });
-      logger.info(`[TIMING] total horarios: ${Date.now() - t0}ms`);
+      break;
+    }
+
+    // ── HORARIOS PROFESORES ──────────────────────────────────
+    case "horarios_profes": {
+      let texto = "";
+      try {
+        const [profes] = await db.execute(
+          `SELECT u.nombre, u.apellido, p.departamento, p.asignaturas
+           FROM profesores p
+           JOIN usuarios u ON p.id_profesor = u.id_usuario
+           WHERE u.estado = 'activo'
+           ORDER BY u.nombre
+           LIMIT 10`
+        );
+
+        if (profes.length === 0) {
+          texto = "No hay profesores registrados en este momento.\n\nConsulta el directorio completo en la plataforma SkillMatch.";
+        } else {
+          texto = "*Profesores disponibles:*\n\n";
+          for (const p of profes) {
+            texto += `👨‍🏫 *${p.nombre} ${p.apellido || ""}*\n`;
+            if (p.departamento) texto += `   Depto: ${p.departamento}\n`;
+            if (p.asignaturas) texto += `   Asignaturas: ${p.asignaturas}\n`;
+            texto += "\n";
+          }
+          texto += "Para mas detalles consulta la plataforma SkillMatch.";
+        }
+      } catch (e) {
+        logger.warn("Error al consultar profesores:", e.message);
+        texto = "No fue posible consultar los profesores en este momento.\nIntenta de nuevo mas tarde.";
+      }
+
+      guardarLog(textoLibre || "opcion_horarios_profes", texto, "horarios", usuario?.id_usuario || null, db);
+      delete userState[from];
+      await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "horarios", usuario });
       break;
     }
 
