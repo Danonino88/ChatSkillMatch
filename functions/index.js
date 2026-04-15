@@ -106,6 +106,23 @@ async function sendWhatsAppList({ to, token, phoneNumberId, headerText, bodyText
   );
 }
 
+async function sendWhatsAppDocument({ to, token, phoneNumberId, documentUrl, filename, caption }) {
+  await axios.post(
+    WA_API(phoneNumberId),
+    {
+      messaging_product: "whatsapp",
+      to,
+      type: "document",
+      document: {
+        link:     documentUrl,
+        filename: filename || "horario.pdf",
+        caption:  caption || "",
+      },
+    },
+    { headers: waHeaders(token), timeout: 20000 }
+  );
+}
+
 async function sendWhatsAppButtons({ to, token, phoneNumberId, bodyText, buttons }) {
   // WhatsApp interactive body limit: 1024 chars
   let text = bodyText;
@@ -514,6 +531,62 @@ async function obtenerPostulacionesEstudiante(id_estudiante, db) {
   return rows;
 }
 
+// Profesores con horario subido (solo Tecnologias de la informacion)
+async function obtenerProfesoresConHorario(db) {
+  const [rows] = await db.execute(
+    `SELECT p.id_profesor, u.nombre, u.apellido, p.asignaturas, p.departamento
+     FROM profesores p
+     JOIN usuarios u ON p.id_usuario = u.id_usuario
+     JOIN horarios_profesores hp ON hp.id_profesor = p.id_profesor
+     WHERE u.estado = 'activo'
+       AND LOWER(p.departamento) LIKE '%tecnolog%informaci%'
+     GROUP BY p.id_profesor
+     ORDER BY u.nombre
+     LIMIT 10`
+  );
+  logger.info("obtenerProfesoresConHorario:", { total: rows.length, profes: rows.map(r => ({ id: r.id_profesor, nombre: r.nombre, depto: r.departamento })) });
+  // Si no encontro con filtro de depto, intentar sin filtro (todos los que tengan horario)
+  if (rows.length === 0) {
+    const [todos] = await db.execute(
+      `SELECT p.id_profesor, u.nombre, u.apellido, p.asignaturas, p.departamento
+       FROM profesores p
+       JOIN usuarios u ON p.id_usuario = u.id_usuario
+       JOIN horarios_profesores hp ON hp.id_profesor = p.id_profesor
+       WHERE u.estado = 'activo'
+       GROUP BY p.id_profesor
+       ORDER BY u.nombre
+       LIMIT 10`
+    );
+    logger.info("obtenerProfesoresConHorario (sin filtro depto):", { total: todos.length, profes: todos.map(r => ({ id: r.id_profesor, nombre: r.nombre, depto: r.departamento })) });
+    if (todos.length > 0) return todos;
+    // Ultimo intento: sin filtro de estado
+    const [sinEstado] = await db.execute(
+      `SELECT p.id_profesor, u.nombre, u.apellido, p.asignaturas, p.departamento
+       FROM profesores p
+       JOIN usuarios u ON p.id_usuario = u.id_usuario
+       JOIN horarios_profesores hp ON hp.id_profesor = p.id_profesor
+       GROUP BY p.id_profesor
+       ORDER BY u.nombre
+       LIMIT 10`
+    );
+    logger.info("obtenerProfesoresConHorario (sin filtros):", { total: sinEstado.length });
+    return sinEstado;
+  }
+  return rows;
+}
+
+// Horarios de un profesor especifico
+async function obtenerHorariosProfesor(idProfesor, db) {
+  const [rows] = await db.execute(
+    `SELECT hp.titulo, hp.descripcion, hp.ruta_pdf, hp.fecha_subida
+     FROM horarios_profesores hp
+     WHERE hp.id_profesor = ?
+     ORDER BY hp.fecha_subida DESC`,
+    [idProfesor]
+  );
+  return rows;
+}
+
 // Documento institucional ??" cacheado en memoria (se refresca cada 10 min)
 let docCache = { texto: null, ts: 0 };
 const DOC_CACHE_TTL = 600_000; // 10 minutos
@@ -815,6 +888,95 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     return;
   }
 
+  // ?"?"? Estado: esperando que seleccione un profesor ?"?"?
+  if (estado === "esperando_seleccion_profesor") {
+    const profId = seleccionId?.startsWith("profesor_") ? seleccionId.replace("profesor_", "") : null;
+
+    if (!profId) {
+      await sendWhatsAppText({
+        to: from, token, phoneNumberId,
+        text: "Por favor selecciona un profesor de la lista.",
+      });
+      return;
+    }
+
+    try {
+      const horarios = await obtenerHorariosProfesor(profId, db);
+      // Obtener nombre del profesor
+      const [profRows] = await db.execute(
+        `SELECT u.nombre, u.apellido, p.asignaturas
+         FROM profesores p
+         JOIN usuarios u ON p.id_usuario = u.id_usuario
+         WHERE p.id_profesor = ? LIMIT 1`,
+        [profId]
+      );
+      const prof = profRows[0];
+      const nombreProf = prof ? `${prof.nombre} ${prof.apellido || ""}`.trim() : "Profesor";
+
+      if (horarios.length === 0) {
+        limpiarEstado(from);
+        await enviarRespuestaConOpciones({
+          to: from, token, phoneNumberId,
+          textoRespuesta: `No se encontraron horarios para *${nombreProf}*.`,
+          intencion: "horarios", usuario,
+        });
+        return;
+      }
+
+      let texto = `\ud83d\udc64 *${nombreProf}*\n`;
+      if (prof?.asignaturas) texto += `Asignaturas: ${prof.asignaturas}\n`;
+      texto += `\n\ud83d\udcc4 *Horarios disponibles:* ${horarios.length}\n`;
+
+      for (const h of horarios) {
+        texto += `\n\u2022 *${h.titulo}*`;
+        if (h.descripcion) texto += ` - ${h.descripcion}`;
+      }
+
+      texto += "\n\nEnviando PDF...";
+
+      // Enviar texto informativo
+      await sendWhatsAppText({ to: from, token, phoneNumberId, text: texto });
+
+      // Enviar cada PDF como documento por WhatsApp
+      const BASE_URL = "https://skillmatch-lkz9.onrender.com";
+      for (const h of horarios) {
+        if (h.ruta_pdf) {
+          const pdfUrl = h.ruta_pdf.startsWith("http")
+            ? h.ruta_pdf
+            : `${BASE_URL}/${h.ruta_pdf.replace(/^\//, "")}`;
+          const filename = `${nombreProf} - ${h.titulo}.pdf`;
+          try {
+            await sendWhatsAppDocument({
+              to: from, token, phoneNumberId,
+              documentUrl: pdfUrl,
+              filename,
+              caption: `\ud83d\udcc4 Horario: ${h.titulo}`,
+            });
+          } catch (docErr) {
+            logger.warn("No se pudo enviar PDF:", docErr.message);
+            await sendWhatsAppText({
+              to: from, token, phoneNumberId,
+              text: `No pude enviar el PDF de *${h.titulo}*. Puedes descargarlo desde:\n${pdfUrl}`,
+            });
+          }
+        }
+      }
+
+      guardarLog(textoLibre || `profesor_${profId}`, texto, "horarios", usuario?.id_usuario || null, db);
+      limpiarEstado(from);
+      await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: "\u00bfDeseas consultar algo mas?", intencion: "horarios", usuario });
+    } catch (e) {
+      logger.error("Error al consultar horario del profesor:", e.message);
+      limpiarEstado(from);
+      await enviarRespuestaConOpciones({
+        to: from, token, phoneNumberId,
+        textoRespuesta: "Hubo un error al consultar el horario. Intenta de nuevo.",
+        intencion: "horarios", usuario,
+      });
+    }
+    return;
+  }
+
   // =========================================================
   // AQUI ENTRA LA NEURONA
   // =========================================================
@@ -968,37 +1130,44 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
 
     // -- HORARIOS PROFESORES ----------------------------------
     case "horarios_profes": {
-      let texto = "";
       try {
-        const [profes] = await db.execute(
-          `SELECT u.nombre, u.apellido, p.departamento, p.asignaturas
-           FROM profesores p
-           JOIN usuarios u ON p.id_profesor = u.id_usuario
-           WHERE u.estado = 'activo'
-           ORDER BY u.nombre
-           LIMIT 10`
-        );
+        const profes = await obtenerProfesoresConHorario(db);
 
         if (profes.length === 0) {
-          texto = "No hay profesores registrados en este momento.\n\nConsulta el directorio completo en la plataforma SkillMatch.";
-        } else {
-          texto = "*Profesores disponibles:*\n\n";
-          for (const p of profes) {
-            texto += `\ud83d\udc64 *${p.nombre} ${p.apellido || ""}*\n`;
-            if (p.departamento) texto += `   Depto: ${p.departamento}\n`;
-            if (p.asignaturas) texto += `   Asignaturas: ${p.asignaturas}\n`;
-            texto += "\n";
-          }
-          texto += "Para mas detalles consulta la plataforma SkillMatch.";
+          const texto = "No hay profesores con horarios subidos en este momento.\n\nConsulta el directorio completo en la plataforma SkillMatch.";
+          limpiarEstado(from);
+          await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "horarios", usuario });
+          break;
         }
+
+        const rows = profes.map((p) => ({
+          id:          `profesor_${p.id_profesor}`,
+          title:       `${p.nombre} ${p.apellido || ""}`.substring(0, 24),
+          description: (p.asignaturas || "Sin asignaturas").substring(0, 72),
+        }));
+
+        userState[from] = "esperando_seleccion_profesor";
+        userStateTs[from] = Date.now();
+
+        await sendWhatsAppList({
+          to: from, token, phoneNumberId,
+          headerText: "Profesores - TI",
+          bodyText: "*Profesores del area de Tecnologias de la Informacion* con horarios disponibles.\n\nSelecciona un profesor para ver su horario:",
+          buttonText: "Ver profesores",
+          sections: [{ title: "Profesores TI", rows }],
+        });
+
+        guardarLog(textoLibre || "opcion_horarios_profes", `Mostrando ${profes.length} profesores`, "horarios", usuario?.id_usuario || null, db);
+        registrarInteraccion(from, "horarios");
       } catch (e) {
         logger.warn("Error al consultar profesores:", e.message);
-        texto = "No fue posible consultar los profesores en este momento.\nIntenta de nuevo mas tarde.";
+        limpiarEstado(from);
+        await enviarRespuestaConOpciones({
+          to: from, token, phoneNumberId,
+          textoRespuesta: "No fue posible consultar los profesores en este momento.\nIntenta de nuevo mas tarde.",
+          intencion: "horarios", usuario,
+        });
       }
-
-      guardarLog(textoLibre || "opcion_horarios_profes", texto, "horarios", usuario?.id_usuario || null, db);
-      limpiarEstado(from);
-      await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "horarios", usuario });
       break;
     }
 
