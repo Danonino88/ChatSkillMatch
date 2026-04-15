@@ -1,7 +1,7 @@
-﻿// =========================================================
-// ChatBot SkillMatch �?" WhatsApp con Neurona ML + Claude API
+// =========================================================
+// ChatBot SkillMatch ??" WhatsApp con Neurona ML + Claude API
 // Node.js 22 con ESM y Firebase Functions
-// Version 2 �?" conectado a BD real con vacantes y postulaciones
+// Version 2 ??" conectado a BD real con vacantes y postulaciones
 // =========================================================
 
 import { onRequest } from "firebase-functions/v2/https";
@@ -29,12 +29,11 @@ const DB_NAME                  = defineSecret("DB_NAME_SKILLMATCH");
 const ANTHROPIC_KEY            = defineSecret("ANTHROPIC_KEY_SKILLMATCH");
 
 // =========================================================
-// NEURONA: entrena una vez al arrancar Firebase
+// NEURONA: entrenamiento lazy (primera peticion)
 // =========================================================
-entrenarClasificador();
 
 // =========================================================
-// CONEXI�"N MYSQL (Pool Lazy)
+// CONEXI?"N MYSQL (Pool Lazy)
 // =========================================================
 let pool = null;
 let poolWarmed = false;
@@ -82,24 +81,37 @@ async function sendWhatsAppText({ to, text, token, phoneNumberId }) {
 }
 
 async function sendWhatsAppList({ to, token, phoneNumberId, headerText, bodyText, buttonText, sections }) {
+  // WhatsApp interactive body limit: 1024 chars
+  let text = bodyText;
+  if (text.length > 1024) {
+    text = text.substring(0, 1020) + "...";
+  }
+  const interactive = {
+    type:   "list",
+    body:   { text },
+    action: { button: buttonText, sections },
+  };
+  if (headerText) {
+    interactive.header = { type: "text", text: headerText };
+  }
   await axios.post(
     WA_API(phoneNumberId),
     {
       messaging_product: "whatsapp",
       to,
       type: "interactive",
-      interactive: {
-        type:   "list",
-        header: { type: "text", text: headerText },
-        body:   { text: bodyText },
-        action: { button: buttonText, sections },
-      },
+      interactive,
     },
     { headers: waHeaders(token), timeout: 15000 }
   );
 }
 
 async function sendWhatsAppButtons({ to, token, phoneNumberId, bodyText, buttons }) {
+  // WhatsApp interactive body limit: 1024 chars
+  let text = bodyText;
+  if (text.length > 1024) {
+    text = text.substring(0, 1020) + "...";
+  }
   await axios.post(
     WA_API(phoneNumberId),
     {
@@ -108,7 +120,7 @@ async function sendWhatsAppButtons({ to, token, phoneNumberId, bodyText, buttons
       type: "interactive",
       interactive: {
         type: "button",
-        body: { text: bodyText },
+        body: { text },
         action: {
           buttons: buttons.map((b) => ({
             type:  "reply",
@@ -122,64 +134,43 @@ async function sendWhatsAppButtons({ to, token, phoneNumberId, bodyText, buttons
 }
 
 // =========================================================
-// MEN�s DINÁMICO POR ROL
+// MENUS DINAMICO POR ROL
 // =========================================================
 // Menu basico para usuarios NO registrados
 const MENU_BASICO = [{
   title: "Opciones",
   rows: [
-    { id: "opcion_fechas",    title: "Fechas de estadia",    description: "Inicio y fin del periodo" },
-    { id: "opcion_horarios",  title: "Horarios servicios",   description: "Servicios escolares y profesores" },
-    { id: "opcion_faq",       title: "Preguntas frecuentes", description: "Dudas sobre la estadia" },
+    { id: "opcion_ayuda_ejemplos", title: "Que puedo preguntar", description: "Ejemplos de lo que puedo hacer" },
+    { id: "opcion_fechas",     title: "Fechas de estadia",    description: "Inicio y fin del periodo" },
+    { id: "opcion_horarios",   title: "Horarios y contactos", description: "Servicios escolares y profesores" },
+    { id: "opcion_info_uteq",  title: "Info sobre la UTEQ",   description: "Ubicacion y datos de contacto" },
+    { id: "opcion_faq",        title: "Preguntas frecuentes", description: "Dudas sobre la estadia" },
   ],
 }];
 
 // Intenciones avanzadas que requieren registro
 const INTENTS_REQUIEREN_REGISTRO = new Set([
   "mis_proyectos", "buscar_matching", "mis_postulaciones_vacantes",
-  "buscar_talento", "vacantes_publicadas", "candidatos",
-  "admin_config", "admin_estadisticas", "admin_logs",
+  "configurar_perfil",
 ]);
 
 function generarMenu(usuario) {
-  if (!usuario) return MENU_BASICO;
-
-  switch (usuario.rol) {
-    case "estudiante":
-      return [{
-        title: "Opciones",
-        rows: [
-          { id: "opcion_fechas",        title: "Fechas de estadia",    description: "Inicio y fin del periodo" },
-          { id: "opcion_horarios",      title: "Horarios servicios",   description: "Servicios escolares y profesores" },
-          { id: "opcion_matching",      title: "Buscar vacantes",      description: "Vacantes abiertas para aplicar" },
-          { id: "opcion_proyectos",     title: "Mis proyectos",        description: "Tus proyectos en SkillMatch" },
-          { id: "opcion_postulaciones", title: "Mis postulaciones",    description: "Estado de tus aplicaciones" },
-          { id: "opcion_faq",           title: "Preguntas frecuentes", description: "Dudas sobre la estadia" },
-        ],
-      }];
-    case "empresa":
-      return [{
-        title: "Opciones",
-        rows: [
-          { id: "opcion_buscar_talento",      title: "Buscar talento",       description: "Estudiantes por tecnologia" },
-          { id: "opcion_vacantes_publicadas", title: "Vacantes publicadas",  description: "Tus vacantes activas" },
-          { id: "opcion_candidatos",           title: "Candidatos",           description: "Postulaciones recibidas" },
-          { id: "opcion_faq",                  title: "Preguntas frecuentes", description: "Dudas generales" },
-        ],
-      }];
-    case "admin":
-      return [{
-        title: "Opciones",
-        rows: [
-          { id: "opcion_config",       title: "Configuracion",        description: "Ajustes del chatbot" },
-          { id: "opcion_estadisticas", title: "Estadisticas",         description: "Metricas de uso" },
-          { id: "opcion_logs",         title: "Logs",                 description: "Historial de conversaciones" },
-          { id: "opcion_faq",          title: "Preguntas frecuentes", description: "Dudas generales" },
-        ],
-      }];
-    default:
-      return MENU_BASICO;
+  if (usuario?.rol === "estudiante") {
+    return [{
+      title: "Opciones",
+      rows: [
+        { id: "opcion_ayuda_ejemplos", title: "Que puedo preguntar", description: "Ejemplos de lo que puedo hacer" },
+        { id: "opcion_fechas",        title: "Fechas de estadia",    description: "Inicio y fin del periodo" },
+        { id: "opcion_horarios",      title: "Horarios y contactos", description: "Servicios escolares y profesores" },
+        { id: "opcion_matching",      title: "Buscar vacantes",      description: "Vacantes abiertas para aplicar" },
+        { id: "opcion_proyectos",     title: "Mis proyectos",        description: "Tus proyectos en SkillMatch" },
+        { id: "opcion_postulaciones", title: "Mis postulaciones",    description: "Estado de tus aplicaciones" },
+        { id: "opcion_info_uteq",     title: "Info sobre la UTEQ",   description: "Ubicacion y datos de contacto" },
+        { id: "opcion_faq",           title: "Preguntas frecuentes", description: "Dudas sobre la estadia" },
+      ],
+    }];
   }
+  return MENU_BASICO;
 }
 
 // =========================================================
@@ -187,13 +178,18 @@ function generarMenu(usuario) {
 // =========================================================
 const OPCIONES_RELACIONADAS = {
   fechas: [
-    { id: "opcion_horarios", title: "Ver horarios" },
-    { id: "opcion_matching", title: "Buscar vacantes" },
-    { id: "opcion_menu",     title: "Menu" },
+    { id: "opcion_horarios",  title: "Ver horarios" },
+    { id: "opcion_info_uteq", title: "Info UTEQ" },
+    { id: "opcion_menu",      title: "Menu" },
   ],
   horarios: [
+    { id: "opcion_fechas",    title: "Ver fechas" },
+    { id: "opcion_info_uteq", title: "Info UTEQ" },
+    { id: "opcion_menu",      title: "Menu" },
+  ],
+  info_uteq: [
     { id: "opcion_fechas",   title: "Ver fechas" },
-    { id: "opcion_matching", title: "Buscar vacantes" },
+    { id: "opcion_horarios", title: "Ver horarios" },
     { id: "opcion_menu",     title: "Menu" },
   ],
   mis_proyectos: [
@@ -212,13 +208,13 @@ const OPCIONES_RELACIONADAS = {
     { id: "opcion_menu",      title: "Menu" },
   ],
   faq: [
-    { id: "opcion_fechas",   title: "Ver fechas" },
-    { id: "opcion_matching", title: "Buscar vacantes" },
-    { id: "opcion_menu",     title: "Menu" },
+    { id: "opcion_fechas",    title: "Ver fechas" },
+    { id: "opcion_info_uteq", title: "Info UTEQ" },
+    { id: "opcion_menu",      title: "Menu" },
   ],
 };
 
-// Opciones basicas para no registrados
+// Opciones basicas para no registrados (max 3 por limite de WhatsApp buttons)
 const OPCIONES_BASICAS = [
   { id: "opcion_fechas",   title: "Ver fechas" },
   { id: "opcion_horarios", title: "Ver horarios" },
@@ -226,8 +222,8 @@ const OPCIONES_BASICAS = [
 ];
 
 function generarOpcionesRelacionadas(intencion, usuario) {
-  if (!usuario) {
-    // No registrado: solo opciones basicas sin repetir la actual
+  if (!usuario || usuario.rol !== "estudiante") {
+    // No registrado o no estudiante: solo opciones basicas sin repetir la actual
     const basicas = OPCIONES_BASICAS.filter((o) => {
       if (intencion === "fechas"   && o.id === "opcion_fechas")   return false;
       if (intencion === "horarios" && o.id === "opcion_horarios") return false;
@@ -244,57 +240,52 @@ function generarOpcionesRelacionadas(intencion, usuario) {
 // Genera saludo personalizado segun rol
 function obtenerSaludo(usuario) {
   const DESC_BOT =
-    "Soy tu asistente virtual de *SkillMatch* 🤖, la plataforma de vinculacion academica de la UTEQ. " +
+    "Soy tu asistente virtual de *SkillMatch* \ud83e\udd16, la plataforma de vinculacion academica de la UTEQ. " +
     "Aqui puedes consultar fechas, horarios, preguntas frecuentes, entre otras cosas.";
 
-  const EJEMPLOS =
-    "� *Desde el menu puedes:*\n" +
-    "• Ver fechas de estadia\n" +
-    "• Consultar horarios de Servicios Escolares y profesores\n" +
-    "• Buscar vacantes y postularte\n" +
-    "• Ver tus proyectos y postulaciones\n\n" +
-    "💡 *O escribeme directamente tus dudas:*\n" +
-    "• _¿Que pasa si no tengo empresa?_\n" +
-    "• _Requisitos para titulacion_\n" +
-    "• _¿Que obligaciones tengo en la estadia?_\n" +
-    "• _¿Donde esta ubicada la UTEQ?_\n" +
-    "• _¿A que hora atiende vinculacion?_\n" +
-    "• _¿Que es SkillMatch?_";
+  // Flujo 1: Usuario anonimo (no registrado o no estudiante)
+  if (!usuario || usuario.rol !== "estudiante") {
+    const EJEMPLOS_ANONIMO =
+      "\ud83d\udccc *Desde el menu puedes:*\n" +
+      "\u2022 Ver fechas de estadia\n" +
+      "\u2022 Consultar horarios y contactos\n" +
+      "\u2022 Informacion sobre la UTEQ\n" +
+      "\u2022 Preguntas frecuentes\n\n" +
+      "\ud83d\udcac *O escribeme directamente tus dudas:*\n" +
+      "\u2022 _\u00bfQue pasa si no tengo empresa?_\n" +
+      "\u2022 _Requisitos para titulacion_\n" +
+      "\u2022 _\u00bfDonde esta ubicada la UTEQ?_\n" +
+      "\u2022 _\u00bfQue es SkillMatch?_";
 
-  if (!usuario) {
-    return `👋 *Bienvenido a SkillMatch*\n\n` +
+    return `\ud83d\udc4b *Bienvenido a SkillMatch*\n\n` +
       `${DESC_BOT}\n\n` +
       `No encontramos tu numero registrado. Puedes crear tu cuenta en:\n` +
       `https://skillmatch-lkz9.onrender.com/\n\n` +
-      `${EJEMPLOS}\n\n` +
+      `${EJEMPLOS_ANONIMO}\n\n` +
       `Mientras tanto, estas son las opciones disponibles:`;
   }
 
-  const nombre = usuario.nombre.split(" ")[0]; // primer nombre
-  switch (usuario.rol) {
-    case "estudiante":
-      return `👋 *Hola, ${nombre}!*\n\n` +
-        `${DESC_BOT}\n\n` +
-        (usuario.carrera ? `📚 *Carrera:* ${usuario.carrera}\n` : "") +
-        (usuario.semestre ? `🎓 *Semestre:* ${usuario.semestre}\n` : "") +
-        `\n${EJEMPLOS}\n\n¿Que deseas consultar?`;
-    case "empresa":
-      return `👋 *Hola, ${nombre}!*\n\n` +
-        `${DESC_BOT}\n\n` +
-        (usuario.razon_social ? `🏢 *Empresa:* ${usuario.razon_social}\n` : "") +
-        (usuario.giro ? `💼 *Giro:* ${usuario.giro}\n` : "") +
-        `\n${EJEMPLOS}\n\n¿Que deseas consultar?`;
-    case "profesor":
-      return `👋 *Hola, Profe ${nombre}!*\n\n` +
-        `${DESC_BOT}\n\n` +
-        (usuario.departamento ? `🏫 *Depto:* ${usuario.departamento}\n` : "") +
-        `\n${EJEMPLOS}\n\n¿Que deseas consultar?`;
-    case "admin":
-      return `👋 *Hola, ${nombre}!* (Admin)\n\n` +
-        `${DESC_BOT}\n\n${EJEMPLOS}\n\n¿Que deseas consultar?`;
-    default:
-      return `👋 *Hola, ${nombre}!*\n\n${DESC_BOT}\n\n${EJEMPLOS}\n\n¿Que deseas consultar?`;
-  }
+  // Flujo 2: Estudiante registrado
+  const nombre = usuario.nombre.split(" ")[0];
+  const EJEMPLOS_ESTUDIANTE =
+    "\ud83d\udccc *Desde el menu puedes:*\n" +
+    "\u2022 Ver fechas de estadia\n" +
+    "\u2022 Consultar horarios de Servicios Escolares y profesores\n" +
+    "\u2022 Buscar vacantes y postularte\n" +
+    "\u2022 Ver tus proyectos y postulaciones\n\n" +
+    "\ud83d\udcac *O escribeme directamente tus dudas:*\n" +
+    "\u2022 _\u00bfQue pasa si no tengo empresa?_\n" +
+    "\u2022 _Requisitos para titulacion_\n" +
+    "\u2022 _\u00bfQue obligaciones tengo en la estadia?_\n" +
+    "\u2022 _\u00bfDonde esta ubicada la UTEQ?_\n" +
+    "\u2022 _\u00bfA que hora atiende vinculacion?_\n" +
+    "\u2022 _\u00bfQue es SkillMatch?_";
+
+  return `\ud83d\udc4b *Hola, ${nombre}!*\n\n` +
+    `${DESC_BOT}\n\n` +
+    (usuario.carrera ? `\ud83c\udf93 *Carrera:* ${usuario.carrera}\n` : "") +
+    (usuario.semestre ? `\ud83d\udcd6 *Semestre:* ${usuario.semestre}\n` : "") +
+    `\n${EJEMPLOS_ESTUDIANTE}\n\n\u00bfQue deseas consultar?`;
 }
 
 async function enviarMenu({ to, token, phoneNumberId, usuario = null, from = null }) {
@@ -363,6 +354,7 @@ function esUsuarioRecurrente(telefono) {
 const ATAJO_MAP = {
   fechas:                     { id: "opcion_fechas",        title: "Fechas" },
   horarios:                   { id: "opcion_horarios",      title: "Horarios" },
+  info_uteq:                  { id: "opcion_info_uteq",     title: "Info UTEQ" },
   mis_proyectos:              { id: "opcion_proyectos",     title: "Mis proyectos" },
   buscar_matching:            { id: "opcion_matching",      title: "Vacantes" },
   mis_postulaciones_vacantes: { id: "opcion_postulaciones", title: "Postulaciones" },
@@ -411,17 +403,17 @@ async function identificarUsuario(telefono, db) {
   const cached = getCachedUser(telefono);
   if (cached !== undefined) return cached;
 
-  // Comparar solo los últimos 10 dígitos del teléfono
+  // Comparar solo los ultimos 10 digitos del telefono
   const soloDigitos = telefono.replace(/\D/g, "");
   const ultimos10 = soloDigitos.slice(-10);
 
-  logger.info("🔍 identificarUsuario", { telefonoOriginal: telefono, soloDigitos, ultimos10 });
+  logger.info("identificarUsuario", { telefonoOriginal: telefono, soloDigitos, ultimos10 });
 
-  // Primero verificar qué teléfonos existen en la BD
+  // Primero verificar que telefonos existen en la BD
   const [todos] = await db.execute(
     `SELECT id_usuario, nombre, telefono FROM usuarios WHERE telefono IS NOT NULL AND estado = 'activo'`
   );
-  logger.info("📞 Teléfonos en BD:", todos.map(u => ({ id: u.id_usuario, nombre: u.nombre, tel: u.telefono })));
+  logger.info("Telefonos en BD:", todos.map(u => ({ id: u.id_usuario, nombre: u.nombre, tel: u.telefono })));
 
   const [rows] = await db.execute(
     `SELECT u.id_usuario, u.nombre, u.apellido, u.id_rol, r.nombre_rol AS rol,
@@ -439,7 +431,7 @@ async function identificarUsuario(telefono, db) {
      LIMIT 1`,
     [ultimos10]
   );
-  logger.info("✅ Resultado query:", { encontrado: rows.length > 0, usuario: rows[0]?.nombre || "ninguno" });
+  logger.info("? Resultado query:", { encontrado: rows.length > 0, usuario: rows[0]?.nombre || "ninguno" });
 
   const usuario = rows[0] || null;
   setCachedUser(telefono, usuario);
@@ -522,7 +514,7 @@ async function obtenerPostulacionesEstudiante(id_estudiante, db) {
   return rows;
 }
 
-// Documento institucional �?" cacheado en memoria (se refresca cada 10 min)
+// Documento institucional ??" cacheado en memoria (se refresca cada 10 min)
 let docCache = { texto: null, ts: 0 };
 const DOC_CACHE_TTL = 600_000; // 10 minutos
 
@@ -553,7 +545,7 @@ async function obtenerDocumentoInstitucional(db) {
   return "Eres el asistente virtual de SkillMatch de la UTEQ. Responde en espanol mexicano, breve y amable.";
 }
 
-// Guardar log �?" fire-and-forget (no bloquea la respuesta al usuario)
+// Guardar log ??" fire-and-forget (no bloquea la respuesta al usuario)
 function guardarLog(pregunta, respuesta, categoria, id_usuario, db) {
   db.execute(
     `INSERT INTO chatbot (pregunta, respuesta, categoria) VALUES (?, ?, ?)`,
@@ -562,16 +554,27 @@ function guardarLog(pregunta, respuesta, categoria, id_usuario, db) {
 }
 
 // =========================================================
-// CLAUDE API
+// CLAUDE API  (con cache de respuestas para velocidad)
 // =========================================================
+const faqCache = new Map();       // key = pregunta normalizada, value = { respuesta, ts }
+const FAQ_CACHE_TTL = 1_800_000;  // 30 min
+
 async function preguntarAClaude(pregunta, apiKey, db) {
+  // Cache: si ya respondimos algo muy parecido, reutilizar
+  const cacheKey = pregunta.toLowerCase().trim().replace(/[^a-z0-9áéíóúñü ]/g, "");
+  const cached = faqCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < FAQ_CACHE_TTL) {
+    logger.info("[FAQ-CACHE] hit:", cacheKey);
+    return cached.respuesta;
+  }
+
   const DOCUMENTO = await obtenerDocumentoInstitucional(db);
 
   const response = await axios.post(
     "https://api.anthropic.com/v1/messages",
     {
-      model:      "claude-3-5-haiku-20241022",  // Haiku: 3-5x mas rapido que Sonnet
-      max_tokens: 300,
+      model:      "claude-haiku-4-5-20251001",
+      max_tokens: 200,
       system:     DOCUMENTO,
       messages:   [{ role: "user", content: pregunta }],
     },
@@ -581,24 +584,50 @@ async function preguntarAClaude(pregunta, apiKey, db) {
         "anthropic-version": "2023-06-01",
         "Content-Type":      "application/json",
       },
-      timeout: 15000,
+      timeout: 8000,
     }
   );
 
-  return response.data.content[0]?.text ||
+  const respuesta = response.data.content[0]?.text ||
     "No pude procesar tu pregunta. Acude a Servicios Escolares.";
+
+  // Guardar en cache
+  faqCache.set(cacheKey, { respuesta, ts: Date.now() });
+  // Limitar tamaño del cache (max 100 entradas)
+  if (faqCache.size > 100) {
+    const oldest = faqCache.keys().next().value;
+    faqCache.delete(oldest);
+  }
+
+  return respuesta;
 }
 
 // =========================================================
 // MANEJADOR DE MENSAJES
 // =========================================================
 const userState = {};
+const userStateTs = {}; // Timestamp de cada estado
+const STATE_TTL = 600_000; // 10 minutos de timeout para estados pendientes
+
+function limpiarEstado(telefono) {
+  delete userState[telefono];
+  delete userStateTs[telefono];
+  delete userState[`${telefono}_vacante`];
+  delete userState[`${telefono}_usuario_postulacion`];
+}
 
 // Intenciones que NECESITAN identificar al usuario en BD
 const INTENTS_NEED_USER = new Set(["mis_proyectos", "buscar_matching"]);
 
 async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
   const t0 = Date.now();
+
+  // Limpiar estado si expiro el TTL
+  if (userState[from] && userStateTs[from] && (Date.now() - userStateTs[from] > STATE_TTL)) {
+    logger.info("Estado expirado para", from, "estado:", userState[from]);
+    limpiarEstado(from);
+  }
+
   const estado = userState[from] || "inicio";
 
   let seleccionId = null;
@@ -615,7 +644,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     return;
   }
 
-  // �"?�"? Funcion lazy: identifica usuario solo cuando se necesite �"?�"?
+  // ?"??"? Funcion lazy: identifica usuario solo cuando se necesite ?"??"?
   // -- Identificacion de usuario EAGER: lanza la query ya, sin bloquear --
   let usuario = getCachedUser(from); // del cache si existe (no va a BD)
   let usuarioPromise = null;
@@ -644,10 +673,10 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     return usuario;
   }
 
-  // �"?�"? Despedida directa (salir/adios/bye) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+  // ?"??"? Despedida directa (salir/adios/bye) ?"??"??"??"??"??"??"??"??"??"??"??"??"??"??"?
   const FAREWELL_WORDS = ["salir", "adios", "bye", "chao", "hasta luego", "gracias"];
   if (textoLibre && FAREWELL_WORDS.includes(textoLibre.toLowerCase())) {
-    delete userState[from];
+    limpiarEstado(from);
     const nombre = usuario?.nombre?.split(" ")[0];
     const despedida = nombre
       ? `Gracias *${nombre}* por usar *SkillMatch*. Exito en tu estadia!`
@@ -656,7 +685,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     return;
   }
 
-  // �"?�"? Estado: esperando que seleccione una vacante de la lista �"?�"?
+  // ?"??"? Estado: esperando que seleccione una vacante de la lista ?"??"?
   if (estado === "esperando_seleccion_vacante") {
     const vacId = seleccionId?.startsWith("vacante_") ? seleccionId.replace("vacante_", "") : null;
 
@@ -681,7 +710,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     );
 
     if (rows.length === 0) {
-      delete userState[from];
+      limpiarEstado(from);
       await enviarRespuestaConOpciones({
         to: from, token, phoneNumberId,
         textoRespuesta: "Esa vacante ya no esta disponible.",
@@ -694,6 +723,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
 
     // Guardar la vacante seleccionada y pedir confirmacion
     userState[from] = "esperando_confirmar_postulacion";
+    userStateTs[from] = Date.now();
     userState[`${from}_vacante`] = vacante;
 
     const detalle =
@@ -714,15 +744,13 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     return;
   }
 
-  // �"?�"? Estado: confirmar postulacion �"?�"?
+  // ?"??"? Estado: confirmar postulacion ?"??"?
   if (estado === "esperando_confirmar_postulacion") {
     const vacante  = userState[`${from}_vacante`];
     const usuarioP = userState[`${from}_usuario_postulacion`];
 
     if (seleccionId === "postular_no" || textoLibre?.toLowerCase() === "no") {
-      delete userState[`${from}_vacante`];
-      delete userState[`${from}_usuario_postulacion`];
-      delete userState[from];
+      limpiarEstado(from);
       await enviarRespuestaConOpciones({
         to: from, token, phoneNumberId,
         textoRespuesta: "De acuerdo, no se realizo la postulacion.",
@@ -733,9 +761,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
 
     if (seleccionId === "postular_si" || textoLibre?.toLowerCase() === "si") {
       if (!usuarioP?.id_estudiante || !vacante?.id_vacante) {
-        delete userState[`${from}_vacante`];
-        delete userState[`${from}_usuario_postulacion`];
-        delete userState[from];
+        limpiarEstado(from);
         await enviarRespuestaConOpciones({
           to: from, token, phoneNumberId,
           textoRespuesta: "No fue posible completar la postulacion. Asegurate de estar registrado en SkillMatch.",
@@ -752,7 +778,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
         if (resultado.ya_existe) {
           textoResp = `Ya te habias postulado a *${vacante.titulo}* en *${vacante.razon_social}*.\n\nPuedes ver el estado de tus postulaciones desde la plataforma SkillMatch.`;
         } else {
-          textoResp = `✅ Te has postulado exitosamente a *${vacante.titulo}* en *${vacante.razon_social}*.\n\nEstado: ⏳ Pendiente\nLa empresa revisara tu perfil y proyectos en SkillMatch.`;
+          textoResp = `? Te has postulado exitosamente a *${vacante.titulo}* en *${vacante.razon_social}*.\n\nEstado: ? Pendiente\nLa empresa revisara tu perfil y proyectos en SkillMatch.`;
         }
 
         guardarLog(
@@ -762,17 +788,12 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
           usuarioP.id_usuario || null,
           db2
         );
-
-        delete userState[`${from}_vacante`];
-        delete userState[`${from}_usuario_postulacion`];
         registrarInteraccion(from, "buscar_matching");
-        delete userState[from];
+        limpiarEstado(from);
         await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: textoResp, intencion: "buscar_matching", usuario });
       } catch (e) {
         logger.error("Error al crear postulacion:", e.message);
-        delete userState[`${from}_vacante`];
-        delete userState[`${from}_usuario_postulacion`];
-        delete userState[from];
+        limpiarEstado(from);
         await enviarRespuestaConOpciones({
           to: from, token, phoneNumberId,
           textoRespuesta: "Hubo un error al procesar tu postulacion. Intenta desde la plataforma web de SkillMatch.",
@@ -798,21 +819,17 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
   // AQUI ENTRA LA NEURONA
   // =========================================================
   const mapaMenu = {
-    opcion_fechas:    "fechas",
-    opcion_horarios:  "horarios",
+    opcion_fechas:             "fechas",
+    opcion_horarios:           "horarios",
     opcion_horarios_escolares: "horarios_escolares",
     opcion_horarios_profes:    "horarios_profes",
-    opcion_faq:       "faq",
-    opcion_proyectos: "mis_proyectos",
-    opcion_matching:            "buscar_matching",
-    opcion_postulaciones:       "mis_postulaciones_vacantes",
-    opcion_menu:                "menu",
-    opcion_buscar_talento:      "buscar_talento",
-    opcion_vacantes_publicadas: "vacantes_publicadas",
-    opcion_candidatos:          "candidatos",
-    opcion_config:              "admin_config",
-    opcion_estadisticas:        "admin_estadisticas",
-    opcion_logs:                "admin_logs",
+    opcion_info_uteq:          "info_uteq",
+    opcion_faq:                "faq",
+    opcion_ayuda_ejemplos:     "ayuda_ejemplos",
+    opcion_proyectos:          "mis_proyectos",
+    opcion_matching:           "buscar_matching",
+    opcion_postulaciones:      "mis_postulaciones_vacantes",
+    opcion_menu:               "menu",
   };
 
   let intencion;
@@ -822,6 +839,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     intencion = mapaMenu[seleccionId];
 
   } else if (textoLibre) {
+    entrenarClasificador(); // lazy: solo entrena la primera vez
     const resultado = clasificar(textoLibre);
     intencion    = resultado.intencion;
     necesitaMenu = resultado.necesitaMenu;
@@ -848,19 +866,20 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
     }
 
   } else {
-    // No hay texto ni seleccion: mostrar menu con lo que haya en cache
-    // (la query ya se lanzo en background, estara lista para el siguiente msg)
+    // No hay texto ni seleccion: mostrar menu
+    await requireUsuario();
     await enviarMenu({ to: from, token, phoneNumberId, usuario, from });
     return;
   }
 
   if (necesitaMenu) {
-    delete userState[from];
+    limpiarEstado(from);
+    await requireUsuario();
     await enviarMenu({ to: from, token, phoneNumberId, usuario, from });
     return;
   }
 
-  // �"?�"? Bloquear intents avanzados para usuarios no registrados �"?�"?
+  // ?"??"? Bloquear intents avanzados para usuarios no registrados ?"??"?
   if (INTENTS_REQUIEREN_REGISTRO.has(intencion)) {
     await requireUsuario();
     if (!usuario) {
@@ -886,7 +905,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
   // =========================================================
   switch (intencion) {
 
-    // �"?�"? FECHAS �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+    // ?"??"? FECHAS ?"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"?
     case "fechas": {
       const TEXTO_FECHAS_DEFAULT =
         "*Fechas de estadia Mayo-Agosto 2026:*\n\n" +
@@ -908,13 +927,13 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
 
       guardarLog(textoLibre || "opcion_fechas", texto, "fechas", usuario?.id_usuario || null, db);
       registrarInteraccion(from, "fechas");
-      delete userState[from];
+      limpiarEstado(from);
       await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "fechas", usuario });
       logger.info(`[TIMING] total fechas: ${Date.now() - t0}ms`);
       break;
     }
 
-    // ── HORARIOS (sub-menú) ──────────────────────────────────
+    // -- HORARIOS (sub-menu) ----------------------------------
     case "horarios": {
       await sendWhatsAppButtons({
         to: from, token, phoneNumberId,
@@ -930,24 +949,24 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       break;
     }
 
-    // ── HORARIOS SERVICIOS ESCOLARES ─────────────────────────
+    // -- HORARIOS SERVICIOS ESCOLARES -------------------------
     case "horarios_escolares": {
       const texto =
         "*Horarios de atencion:*\n\n" +
-        "🏫 *Servicios Escolares:*\n" +
+        "\ud83d\udccd *Servicios Escolares:*\n" +
         "Lun-Vie: 9:00 - 14:00 y 16:00 - 18:00\n\n" +
-        "🤝 *Vinculacion:*\n" +
+        "\ud83d\udccd *Vinculacion:*\n" +
         "Lun-Vie: 9:00 - 15:00\n" +
         "Ubicacion: Edificio principal, planta baja\n\n" +
-        "📞 Telefono UTEQ: (442) 209 6100";
+        "\ud83d\udcde Telefono UTEQ: (442) 209 6100";
 
       guardarLog(textoLibre || "opcion_horarios_escolares", texto, "horarios", usuario?.id_usuario || null, db);
-      delete userState[from];
+      limpiarEstado(from);
       await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "horarios", usuario });
       break;
     }
 
-    // ── HORARIOS PROFESORES ──────────────────────────────────
+    // -- HORARIOS PROFESORES ----------------------------------
     case "horarios_profes": {
       let texto = "";
       try {
@@ -965,7 +984,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
         } else {
           texto = "*Profesores disponibles:*\n\n";
           for (const p of profes) {
-            texto += `👨‍🏫 *${p.nombre} ${p.apellido || ""}*\n`;
+            texto += `\ud83d\udc64 *${p.nombre} ${p.apellido || ""}*\n`;
             if (p.departamento) texto += `   Depto: ${p.departamento}\n`;
             if (p.asignaturas) texto += `   Asignaturas: ${p.asignaturas}\n`;
             texto += "\n";
@@ -978,12 +997,12 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       }
 
       guardarLog(textoLibre || "opcion_horarios_profes", texto, "horarios", usuario?.id_usuario || null, db);
-      delete userState[from];
+      limpiarEstado(from);
       await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "horarios", usuario });
       break;
     }
 
-    // �"?�"? MIS PROYECTOS �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+    // ?"??"? MIS PROYECTOS ?"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"?
     case "mis_proyectos": {
       await requireUsuario();
       if (!usuario) {
@@ -991,7 +1010,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
           "Para ver tus proyectos necesito identificarte.\n\n" +
           "Asegurate de que tu numero de WhatsApp este registrado en tu perfil de SkillMatch.\n" +
           "Puedes actualizarlo desde la plataforma web.";
-        delete userState[from];
+        limpiarEstado(from);
         await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "mis_proyectos", usuario });
         break;
       }
@@ -1003,7 +1022,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
           `Hola *${usuario.nombre}*, aun no tienes proyectos subidos en SkillMatch.\n\n` +
           `Puedes subir tu primer proyecto desde la plataforma web para que las empresas te encuentren.`;
         registrarInteraccion(from, "mis_proyectos");
-        delete userState[from];
+        limpiarEstado(from);
         await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "mis_proyectos", usuario });
         break;
       }
@@ -1013,25 +1032,25 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
         const estadoTexto =
           p.estado === "completado"  ? "Completado" :
           p.estado === "en progreso" ? "En progreso" : "Pausado";
-        texto += `• *${p.titulo.trim()}* — ${estadoTexto}\n`;
+        texto += `• *${p.titulo.trim()}* - ${estadoTexto}\n`;
         if (p.tecnologias) texto += `  Tecnologias: ${p.tecnologias}\n`;
         texto += "\n";
       }
 
       guardarLog(textoLibre || "opcion_proyectos", texto, "mis_proyectos", usuario.id_usuario, db);
       registrarInteraccion(from, "mis_proyectos");
-      delete userState[from];
+      limpiarEstado(from);
       await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "mis_proyectos", usuario });
       logger.info(`[TIMING] total mis_proyectos: ${Date.now() - t0}ms`);
       break;
     }
 
-    // �"?�"? BUSCAR MATCHING �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+    // ?"??"? BUSCAR MATCHING ?"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"?
     case "buscar_matching": {
       await requireUsuario();
 
       if (!usuario || usuario.rol !== "estudiante" || !usuario.id_estudiante) {
-        delete userState[from];
+        limpiarEstado(from);
         await enviarRespuestaConOpciones({
           to: from, token, phoneNumberId,
           textoRespuesta:
@@ -1046,7 +1065,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       const vacantes = await obtenerVacantesAbiertas(db);
 
       if (vacantes.length === 0) {
-        delete userState[from];
+        limpiarEstado(from);
         await enviarRespuestaConOpciones({
           to: from, token, phoneNumberId,
           textoRespuesta: "No hay vacantes disponibles en este momento.\n\nAcude a Vinculacion para mas opciones.",
@@ -1063,6 +1082,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       }));
 
       userState[from] = "esperando_seleccion_vacante";
+      userStateTs[from] = Date.now();
       userState[`${from}_usuario_postulacion`] = usuario;
 
       await sendWhatsAppList({
@@ -1078,12 +1098,12 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       break;
     }
 
-    // �"?�"? MIS POSTULACIONES �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+    // ?"??"? MIS POSTULACIONES ?"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"?
     case "mis_postulaciones_vacantes": {
       await requireUsuario();
 
       if (!usuario || usuario.rol !== "estudiante" || !usuario.id_estudiante) {
-        delete userState[from];
+        limpiarEstado(from);
         await enviarRespuestaConOpciones({
           to: from, token, phoneNumberId,
           textoRespuesta:
@@ -1098,7 +1118,7 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
 
       if (postulaciones.length === 0) {
         registrarInteraccion(from, "mis_postulaciones_vacantes");
-        delete userState[from];
+        limpiarEstado(from);
         await enviarRespuestaConOpciones({
           to: from, token, phoneNumberId,
           textoRespuesta:
@@ -1110,10 +1130,10 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       }
 
       const estadoMap = {
-        pendiente:   "⏳ Pendiente",
-        en_revision: "🔍 En revision",
-        aceptado:    "✅ Aceptado",
-        rechazado:   "❌ Rechazado",
+        pendiente:   "\u23f3 Pendiente",
+        en_revision: "\ud83d\udd0d En revision",
+        aceptado:    "\u2705 Aceptado",
+        rechazado:   "\u274c Rechazado",
       };
 
       let texto = `*Tus postulaciones, ${usuario.nombre}:*\n\n`;
@@ -1121,20 +1141,20 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
         const fecha = new Date(po.fecha_postulacion).toLocaleDateString("es-MX", {
           day: "numeric", month: "short", year: "numeric",
         });
-        texto += `• *${po.titulo}* — ${po.razon_social}\n`;
+        texto += `• *${po.titulo}* - ${po.razon_social}\n`;
         texto += `  Estado: ${estadoMap[po.estado] || po.estado}\n`;
         texto += `  Fecha: ${fecha}\n\n`;
       }
 
       guardarLog(textoLibre || "opcion_postulaciones", texto, "mis_postulaciones", usuario.id_usuario, db);
       registrarInteraccion(from, "mis_postulaciones_vacantes");
-      delete userState[from];
+      limpiarEstado(from);
       await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "mis_postulaciones_vacantes", usuario });
       logger.info(`[TIMING] total mis_postulaciones: ${Date.now() - t0}ms`);
       break;
     }
 
-    // �"?�"? FAQ �?' CLAUDE API �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+    // ?"??"? FAQ ??' CLAUDE API ?"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"?
     case "faq": {
       let respuesta;
       try {
@@ -1151,88 +1171,114 @@ async function handleMessage({ from, msg, token, phoneNumberId, cfg, db }) {
       guardarLog(textoLibre || "faq", respuesta, "faq", usuario?.id_usuario || null, db);
 
       registrarInteraccion(from, "faq");
-      delete userState[from];
+      limpiarEstado(from);
       await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: respuesta, intencion: "faq", usuario });
       logger.info(`[TIMING] total faq: ${Date.now() - t0}ms`);
       break;
     }
 
-    // �"?�"? EMPRESA: buscar talento �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
-    case "buscar_talento": {
+    // -- AYUDA / EJEMPLOS -------------------------------------
+    case "ayuda_ejemplos": {
+      const esEstudiante = usuario?.rol === "estudiante";
+      const seccionesAnonimo = [
+        { title: "Fechas y horarios", rows: [
+          { id: "opcion_fechas",   title: "Fechas de estadia",    description: "Inicio, fin y periodos de estadia" },
+          { id: "opcion_horarios", title: "Horarios y contactos", description: "Servicios Escolares, profesores" },
+        ]},
+        { title: "Informacion general", rows: [
+          { id: "opcion_info_uteq", title: "Info sobre la UTEQ",   description: "Ubicacion, telefono y datos" },
+          { id: "opcion_faq",       title: "Preguntas frecuentes", description: "Requisitos, titulacion, obligaciones" },
+        ]},
+      ];
+      const seccionesEstudiante = [
+        { title: "Fechas y horarios", rows: [
+          { id: "opcion_fechas",   title: "Fechas de estadia",    description: "Inicio, fin y periodos de estadia" },
+          { id: "opcion_horarios", title: "Horarios y contactos", description: "Servicios Escolares, profesores" },
+        ]},
+        { title: "Vacantes y postulaciones", rows: [
+          { id: "opcion_matching",      title: "Buscar vacantes",   description: "Vacantes abiertas para aplicar" },
+          { id: "opcion_postulaciones", title: "Mis postulaciones", description: "Estado de tus aplicaciones" },
+          { id: "opcion_proyectos",     title: "Mis proyectos",     description: "Tus proyectos en SkillMatch" },
+        ]},
+        { title: "Informacion general", rows: [
+          { id: "opcion_info_uteq", title: "Info sobre la UTEQ",   description: "Ubicacion, telefono y datos" },
+          { id: "opcion_faq",       title: "Preguntas frecuentes", description: "Requisitos, titulacion, obligaciones" },
+        ]},
+      ];
+
+      const textoAyuda =
+        "*\u00bfQue puedo preguntar?*\n\n" +
+        "Puedes seleccionar un tema de la lista o *escribirme directamente*, por ejemplo:\n\n" +
+        "\u2022 _\u00bfCuando empieza la estadia?_\n" +
+        "\u2022 _\u00bfA que hora atiende Servicios Escolares?_\n" +
+        "\u2022 _\u00bfDonde esta la UTEQ?_\n" +
+        "\u2022 _\u00bfQue pasa si no tengo empresa?_\n" +
+        (esEstudiante
+          ? "\u2022 _\u00bfQue empresas buscan desarrolladores?_\n" +
+            "\u2022 _\u00bfEn que estado estan mis postulaciones?_\n" +
+            "\u2022 _\u00bfComo esta mi proyecto?_\n"
+          : "") +
+        "\u2022 _\u00bfComo edito mi perfil?_\n" +
+        "\nSelecciona un tema para comenzar:";
+
+      guardarLog(textoLibre || "ayuda_ejemplos", textoAyuda, "ayuda_ejemplos", usuario?.id_usuario || null, db);
+      limpiarEstado(from);
+      await sendWhatsAppList({
+        to: from, token, phoneNumberId,
+        bodyText: textoAyuda,
+        buttonText: "Ver temas",
+        sections: esEstudiante ? seccionesEstudiante : seccionesAnonimo,
+      });
+      logger.info(`[TIMING] total ayuda_ejemplos: ${Date.now() - t0}ms`);
+      break;
+    }
+
+    // -- INFO UTEQ --------------------------------------------
+    case "info_uteq": {
+      const texto =
+        "*Universidad Tecnologica de Queretaro (UTEQ)*\n\n" +
+        "\ud83d\udccd Av. Pie de la Cuesta No. 2501\nCol. Unidad Nacional, Queretaro, Qro. C.P. 76148\n\n" +
+        "\ud83d\udcde Telefonos: (442) 209 6100 al 04\n" +
+        "\ud83c\udf10 www.uteq.edu.mx\n\n" +
+        "*SkillMatch* es la plataforma digital de la UTEQ que conecta estudiantes, profesores y empresas " +
+        "para gestionar estadias profesionales.\n\n" +
+        "Permite a los estudiantes mostrar sus proyectos innovadores y a las empresas encontrar talento " +
+        "segun las tecnologias que buscan.\n\n" +
+        "Registrate o inicia sesion en:\nhttps://skillmatch-lkz9.onrender.com/";
+
+      guardarLog(textoLibre || "opcion_info_uteq", texto, "info_uteq", usuario?.id_usuario || null, db);
+      registrarInteraccion(from, "info_uteq");
+      limpiarEstado(from);
+      await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "info_uteq", usuario });
+      logger.info(`[TIMING] total info_uteq: ${Date.now() - t0}ms`);
+      break;
+    }
+
+    // -- CONFIGURAR PERFIL ------------------------------------
+    case "configurar_perfil": {
       await requireUsuario();
-      const texto = usuario?.rol === "empresa"
-        ? "Para buscar talento escribe la tecnologia que necesitas.\nEj: *React*, *Python*, *Java*"
-        : "Esta funcion es exclusiva para empresas registradas en SkillMatch.";
-      delete userState[from];
+      const texto = usuario
+        ? `*${usuario.nombre.split(" ")[0]}*, puedes editar tu perfil desde la plataforma web de SkillMatch:\n\nhttps://skillmatch-lkz9.onrender.com/\n\nAhi podras actualizar tus datos personales, telefono, correo y mas.`
+        : "Para configurar tu perfil necesitas estar registrado en SkillMatch.\n\nRegistrate en:\nhttps://skillmatch-lkz9.onrender.com/";
+
+      guardarLog(textoLibre || "configurar_perfil", texto, "configurar_perfil", usuario?.id_usuario || null, db);
+      limpiarEstado(from);
       await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "faq", usuario });
       break;
     }
 
-    // �"?�"? EMPRESA: vacantes publicadas �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
-    case "vacantes_publicadas": {
-      await requireUsuario();
-      const texto = usuario?.rol === "empresa"
-        ? "Consulta tus vacantes publicadas desde la plataforma web de SkillMatch."
-        : "Esta funcion es exclusiva para empresas registradas en SkillMatch.";
-      delete userState[from];
-      await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "faq", usuario });
-      break;
-    }
-
-    // �"?�"? EMPRESA: candidatos �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
-    case "candidatos": {
-      await requireUsuario();
-      const texto = usuario?.rol === "empresa"
-        ? "Revisa los candidatos postulados a tus vacantes desde la plataforma web de SkillMatch."
-        : "Esta funcion es exclusiva para empresas registradas en SkillMatch.";
-      delete userState[from];
-      await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "faq", usuario });
-      break;
-    }
-
-    // �"?�"? ADMIN: configuracion �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
-    case "admin_config": {
-      await requireUsuario();
-      const texto = usuario?.rol === "admin"
-        ? "Accede a la configuracion del chatbot desde el panel de administracion web."
-        : "Acceso restringido a administradores.";
-      delete userState[from];
-      await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "faq", usuario });
-      break;
-    }
-
-    // �"?�"? ADMIN: estadisticas �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
-    case "admin_estadisticas": {
-      await requireUsuario();
-      const texto = usuario?.rol === "admin"
-        ? "Consulta las estadisticas de uso del chatbot desde el panel de administracion web."
-        : "Acceso restringido a administradores.";
-      delete userState[from];
-      await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "faq", usuario });
-      break;
-    }
-
-    // �"?�"? ADMIN: logs �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
-    case "admin_logs": {
-      await requireUsuario();
-      const texto = usuario?.rol === "admin"
-        ? "Revisa el historial de conversaciones desde el panel de administracion web."
-        : "Acceso restringido a administradores.";
-      delete userState[from];
-      await enviarRespuestaConOpciones({ to: from, token, phoneNumberId, textoRespuesta: texto, intencion: "faq", usuario });
-      break;
-    }
-
-    // �"?�"? MENU (fallback) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+    // ?"??"? MENU (fallback) ?"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"??"?
     case "menu":
     default: {
-      // No bloquear en requireUsuario: usa cache o muestra menu basico
-      if (seleccionId === "opcion_menu") {
-        await requireUsuario();
-        await enviarMenu({ to: from, token, phoneNumberId, usuario });
-      } else {
-        await enviarMenu({ to: from, token, phoneNumberId, usuario, from });
-      }
+      await requireUsuario();
+      // Siempre mostrar lista completa (nunca atajos al pedir menu)
+      await sendWhatsAppList({
+        to: from, token, phoneNumberId,
+        headerText: "SkillMatch",
+        bodyText:   obtenerSaludo(usuario),
+        buttonText: "Ver opciones",
+        sections:   generarMenu(usuario),
+      });
       break;
     }
   }
@@ -1296,7 +1342,7 @@ export const whatsappWebhookSkillMatch = onRequest(
     }
 
     // POST: mensajes entrantes
-    // �"?�"? Responder 200 INMEDIATAMENTE para que Meta no reintente �"?�"?
+    // ?"??"? Responder 200 INMEDIATAMENTE para que Meta no reintente ?"??"?
     res.sendStatus(200);
 
     try {
@@ -1313,7 +1359,7 @@ export const whatsappWebhookSkillMatch = onRequest(
       const msg = messages[0];
       if (!msg || (msg.type !== "text" && msg.type !== "interactive")) return;
 
-      // �"?�"? Deduplicar: si ya procesamos este mensaje, ignorar �"?�"?
+      // ?"??"? Deduplicar: si ya procesamos este mensaje, ignorar ?"??"?
       if (yaProcesado(msg.id)) {
         logger.info("Mensaje duplicado ignorado:", msg.id);
         return;

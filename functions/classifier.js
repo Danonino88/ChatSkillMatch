@@ -64,8 +64,10 @@ export function clasificar(textoOriginal) {
   const topScore = top?.value || 0;
   const gap = segundo ? topScore - segundo.value : topScore;
 
-  // Confianza baja: scores muy parejos o top muy bajo
-  const confianzaBaja = gap < 0.15 && texto.split(" ").length > 1;
+  // Confianza baja: solo si el top y segundo son extremadamente cercanos (ratio)
+  // Con Naive Bayes los scores absolutos son muy pequeños, usamos ratio en vez de gap
+  const ratio = segundo ? topScore / segundo.value : Infinity;
+  const confianzaBaja = ratio < 1.5 && texto.split(" ").length > 3;
 
   // Solo muestra menu si el modelo clasifico como "menu"
   // y el texto es muy corto (saludo de una palabra)

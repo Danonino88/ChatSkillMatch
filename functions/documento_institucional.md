@@ -4,7 +4,9 @@
 
 ## Sobre SkillMatch y la UTEQ
 
-SkillMatch es la plataforma digital de la Universidad Tecnológica de Querétaro (UTEQ) que conecta estudiantes, profesores y empresas para gestionar estadías profesionales. Permite a los estudiantes mostrar sus proyectos innovadores y a las empresas encontrar talento según las tecnologías que buscan.
+La Universidad Tecnológica de Querétaro (UTEQ) es una institución pública de educación superior fundada en 1994. Su modelo educativo se basa en la formación tecnológica mediante programas que integran teoría y práctica, incluyendo una etapa obligatoria denominada estadía profesional.
+
+SkillMatch es la plataforma digital de la UTEQ que conecta estudiantes, profesores y empresas para gestionar estadías profesionales. Permite a los estudiantes mostrar sus proyectos innovadores y a las empresas encontrar talento según las tecnologías que buscan.
 
 La UTEQ está ubicada en Av. Pie de la Cuesta No. 2501 Col. Unidad Nacional, Querétaro, Qro. C.P. 76148. Teléfonos: (442) 209 6100 al 04. Sitio web: www.uteq.edu.mx
 
@@ -40,6 +42,14 @@ La UTEQ está ubicada en Av. Pie de la Cuesta No. 2501 Col. Unidad Nacional, Que
 
 ## Información importante para estudiantes
 
+### Qué es la estadía profesional
+La estadía profesional es un periodo académico obligatorio en el que el estudiante desarrolla un proyecto dentro de una organización real, aplicando los conocimientos adquiridos durante su formación. Este proceso está regulado por el Reglamento de Visitas y Estadías Profesionales. Durante este periodo, el estudiante no solo adquiere experiencia laboral, sino que también representa a la institución, por lo que debe mantener una conducta ética, profesional y responsable.
+
+### Modalidades de estadía
+El estudiante puede realizar su estadía bajo dos modalidades:
+- Empresa conseguida por cuenta propia, validada por la universidad.
+- Asignación institucional, en caso de no haber conseguido empresa.
+
 ### Si no tienes empresa
 - Tienes hasta el 15 de abril de 2026 para conseguir una empresa por tu cuenta.
 - Si no consigues empresa, debes enviar tu CV a la universidad lo antes posible para que te asignen un lugar disponible.
@@ -49,6 +59,11 @@ La UTEQ está ubicada en Av. Pie de la Cuesta No. 2501 Col. Unidad Nacional, Que
 ### Horario de estadía
 - El horario lo establece la empresa donde realizas tu estadía, no la universidad.
 - Debes cumplir la totalidad de horas según el programa de tu carrera.
+
+### Compensación económica
+- La compensación económica NO está garantizada; depende completamente de la empresa.
+- Algunas empresas ofrecen apoyo económico o sueldo, otras únicamente brindan la experiencia profesional.
+- La universidad no interviene en la negociación de pagos.
 
 ### Seguro contra accidentes
 - Al inicio de la estadía debes cubrir el costo del seguro contra accidentes. Pregunta en Servicios Escolares el monto exacto.
@@ -98,6 +113,24 @@ La UTEQ está ubicada en Av. Pie de la Cuesta No. 2501 Col. Unidad Nacional, Que
 - Costo del trámite de emisión de título: $3,960.00 pesos.
 - Plazo de entrega del título: máximo 8 meses a partir de la entrega del reporte de titulados.
 - Para agendar entrega de documentos: maria.hernandez@uteq.edu.mx, alejandro.hernandez@uteq.edu.mx, ljimenez@uteq.edu.mx
+
+---
+
+## La Memoria de Estadía
+
+La memoria de estadía es un documento académico obligatorio en el que el estudiante describe el proyecto realizado durante su estadía, incluyendo objetivos, desarrollo y resultados. Debe estar finalizada y autorizada por el asesor para poder continuar con el proceso de titulación.
+
+---
+
+## Instrucciones de estilo para respuestas
+
+- Responde de forma breve y clara (máximo 3 párrafos).
+- Siempre en español mexicano.
+- Usa emojis sutiles (📅 📁 🏫) cuando sea apropiado.
+- Termina con: "¿Tienes más preguntas?" o sugiere un siguiente paso.
+- Si la pregunta es complicada, ofrece contactos específicos.
+- Nunca inventes fechas, montos, datos de empleados o empresas que no estén en este documento.
+- Si no tienes la información, responde honestamente y sugiere contactar a Servicios Escolares o Vinculación.
 
 ---
 
@@ -151,7 +184,7 @@ Debes notificarlo de inmediato a tu asesor de la UTEQ. Vinculación evaluará el
 - Trámites de titulación: maria.hernandez@uteq.edu.mx / alejandro.hernandez@uteq.edu.mx / ljimenez@uteq.edu.mx
 
 ---
-## Conoce tu nueva universidad!
+## Conoce tu nueva universidad
 Ven al Halcón Tour, visita las áreas de la UTEQ, conoce la Oferta Educativa y las actividades extracurriculares a la que podrás inscribirte, te esperamos todos los miércolesa las 10:00 am en el Edificio Student Talent HUB.
 
 ## Instrucciones para Claude

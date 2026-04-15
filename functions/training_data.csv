@@ -125,13 +125,318 @@ qué vacantes hay disponibles,buscar_matching
 empresas que busquen mysql,buscar_matching
 hay oportunidades para estudiantes de redes,buscar_matching
 buscar empresa por tecnología,buscar_matching
-alumnos que sepan react,buscar_matching
-busco estudiantes con conocimientos en python,buscar_matching
-quiero ver alumnos que sepan node,buscar_matching
+alumnos que sepan react,faq
+busco estudiantes con conocimientos en python,faq
+quiero ver alumnos que sepan node,faq
 estudiantes disponibles para estadía,buscar_matching
-buscar talento con javascript,buscar_matching
+buscar talento con javascript,faq
 ver proyectos con react,buscar_matching
-alumnos con experiencia en mysql,buscar_matching
-busco practicantes que sepan programar,buscar_matching
-ver estudiantes de ingeniería en software,buscar_matching
-qué alumnos tienen proyectos con python,buscar_matching
+alumnos con experiencia en mysql,faq
+busco practicantes que sepan programar,faq
+ver estudiantes de ingeniería en software,faq
+qué alumnos tienen proyectos con python,faq
+dónde está la uteq,info_uteq
+ubicación de la uteq,info_uteq
+dirección de la universidad,info_uteq
+teléfono de la uteq,info_uteq
+contacto de la uteq,info_uteq
+qué es skillmatch,info_uteq
+para qué sirve skillmatch,info_uteq
+información de la uteq,info_uteq
+datos de la universidad,info_uteq
+cómo llego a la uteq,info_uteq
+dónde queda la universidad,info_uteq
+página web de la uteq,info_uteq
+sitio web de la universidad,info_uteq
+qué es la uteq,info_uteq
+sobre la universidad,info_uteq
+quiero saber de la uteq,info_uteq
+quiero cambiar mis datos,configurar_perfil
+cómo edito mi perfil,configurar_perfil
+actualizar mi información,configurar_perfil
+cambiar mi teléfono,configurar_perfil
+configurar mi cuenta,configurar_perfil
+editar mi perfil,configurar_perfil
+cómo actualizo mi correo,configurar_perfil
+quiero modificar mis datos,configurar_perfil
+qué puedo preguntar,ayuda_ejemplos
+qué cosas puedo hacer,ayuda_ejemplos
+ayuda,ayuda_ejemplos
+qué opciones tengo,ayuda_ejemplos
+qué me puedes ayudar,ayuda_ejemplos
+ejemplos de preguntas,ayuda_ejemplos
+qué temas manejas,ayuda_ejemplos
+para qué sirves,ayuda_ejemplos
+qué puedo consultar,ayuda_ejemplos
+en qué me ayudas,ayuda_ejemplos
+dame ejemplos,ayuda_ejemplos
+cómo funciona este bot,ayuda_ejemplos
+qué sabes hacer,ayuda_ejemplos
+help,ayuda_ejemplos
+no sé qué preguntar,ayuda_ejemplos
+qué onda qué puedo hacer aquí,ayuda_ejemplos
+a ver qué hay,ayuda_ejemplos
+horarios profesores,horarios
+horarios de profesores,horarios
+horarios servicios escolares,horarios
+horarios de servicios escolares,horarios
+horario profesores,horarios
+horario de profesores,horarios
+horario servicios escolares,horarios
+horario de servicios,horarios
+horario profesor,horarios
+horario profe,horarios
+horario de un profesor,horarios
+horario de mi profe,horarios
+horarios profes,horarios
+horarios de los profes,horarios
+horarios de los profesores,horarios
+horario de los maestros,horarios
+horarios escolares,horarios
+servicios escolares horario,horarios
+servicios escolares,horarios
+quiero ver horarios,horarios
+necesito horarios,horarios
+ver horarios,horarios
+dame los horarios,horarios
+cuáles son los horarios,horarios
+horario de clases,horarios
+ver fechas,fechas
+dame fechas,fechas
+fechas de estadía,fechas
+ver las fechas,fechas
+fechas estadía,fechas
+cuáles son las fechas,fechas
+necesito las fechas,fechas
+quiero ver fechas,fechas
+fechas importantes,fechas
+cuándo son las fechas,fechas
+fecha de entrega,fechas
+fechas de entrega,fechas
+vacantes,buscar_matching
+buscar vacantes,buscar_matching
+quiero vacantes,buscar_matching
+ver vacantes,buscar_matching
+hay vacantes,buscar_matching
+vacantes disponibles,buscar_matching
+mostrar vacantes,buscar_matching
+dame las vacantes,buscar_matching
+qué vacantes hay,buscar_matching
+necesito vacante,buscar_matching
+buscar empresa,buscar_matching
+empresas disponibles,buscar_matching
+mis proyectos,mis_proyectos
+ver proyectos,mis_proyectos
+quiero ver mis proyectos,mis_proyectos
+proyectos,mis_proyectos
+dame mis proyectos,mis_proyectos
+mostrar proyectos,mis_proyectos
+mis postulaciones,mis_postulaciones_vacantes
+ver postulaciones,mis_postulaciones_vacantes
+estado de mis postulaciones,mis_postulaciones_vacantes
+postulaciones,mis_postulaciones_vacantes
+cómo van mis postulaciones,mis_postulaciones_vacantes
+mostrar postulaciones,mis_postulaciones_vacantes
+preguntas frecuentes,faq
+faq,faq
+dudas,faq
+tengo una duda,faq
+tengo dudas,faq
+pregunta,faq
+info uteq,info_uteq
+información uteq,info_uteq
+información de la uteq,info_uteq
+datos de la uteq,info_uteq
+sobre la uteq,info_uteq
+dónde está la uteq,info_uteq
+teléfono uteq,info_uteq
+dirección uteq,info_uteq
+ubicación uteq,info_uteq
+contacto uteq,info_uteq
+menú,menu
+menu,menu
+regresar,menu
+volver,menu
+inicio,menu
+regresar al menu,menu
+volver al inicio,menu
+qué puedo hacer,ayuda_ejemplos
+opciones,ayuda_ejemplos
+qué hay,ayuda_ejemplos
+qué tienes,ayuda_ejemplos
+oye qué fechas son,fechas
+dame las fechas,fechas
+a ver las fechas de inicio,fechas
+necesito saber cuándo empiezo a trabajar,fechas
+en qué fecha me voy a la empresa,fechas
+cuándo termino la estadía,fechas
+hasta cuándo dura,fechas
+cuál es el primer día,fechas
+cuál es el último día,fechas
+cuáles son las fechas límite,fechas
+fecha para elegir empresa,fechas
+cuándo envío el CV,fechas
+fecha de inicio de actividades,fechas
+cuándo son los talleres,fechas
+en qué mes empiezo la estadía,fechas
+qué mes termina la estadía,fechas
+necesito saber cuándo debo estar listo,fechas
+cuándo me tengo que presentar a la empresa,fechas
+en qué fecha me asignan la empresa,fechas
+cuándo comienzan los talleres de seguimiento,fechas
+a qué hora atienden servicios escolares,horarios
+en qué horario debo ir a control escolar,horarios
+cuál es el horario de vinculación,horarios
+en qué horario puedo ir a hablar de mi estadía,horarios
+a qué hora abre la escuela,horarios
+dónde están los servicios escolares,horarios
+cómo contacto a servicios,horarios
+a qué hora tiene asesorías el profe,horarios
+cuándo puedo ver a mi asesor,horarios
+horario de atención de asesores,horarios
+días y horas para hablar con mi profesor,horarios
+en qué momento puedo resolver dudas con mi asesor,horarios
+dónde queda servicios escolares,horarios
+en qué edificio atienden a estudiantes,horarios
+cuál es la ubicación de la oficina de vinculación,horarios
+dónde está la coordinación de estadías,horarios
+de qué hora a qué hora atienden,horarios
+están abierto los miércoles,horarios
+a qué hora cierran,horarios
+dame mis proyectos,mis_proyectos
+quiero ver qué subí,mis_proyectos
+muestrame mi portafolio,mis_proyectos
+en qué estado está mi proyecto,mis_proyectos
+cuáles proyectos tengo activos,mis_proyectos
+cómo edito mi proyecto,mis_proyectos
+quiero cambiar la descripción,mis_proyectos
+necesito actualizar las tecnologías,mis_proyectos
+cómo subo evidencias,mis_proyectos
+quiero marcar como completado,mis_proyectos
+mi proyecto está privado,mis_proyectos
+por qué no se ve mi proyecto,mis_proyectos
+cuándo se publica mi proyecto,mis_proyectos
+hay vacantes disponibles,buscar_matching
+cuáles vacantes puedo aplicar,buscar_matching
+qué oportunidades hay,buscar_matching
+dónde veo las ofertas de trabajo,buscar_matching
+hay vacantes para react,buscar_matching
+busco empresas con node js,buscar_matching
+quién necesita python,buscar_matching
+hay ofertas para mysql,buscar_matching
+busco javascript,buscar_matching
+vacantes junior,buscar_matching
+hay posiciones semi-senior,buscar_matching
+ofertas para principiantes,buscar_matching
+dónde hay vacantes fáciles,buscar_matching
+cómo aplico a una vacante,buscar_matching
+puedo enviar mi CV,buscar_matching
+cómo me postulo,buscar_matching
+quiero aplicar a una oferta,buscar_matching
+cómo van mis aplicaciones,mis_postulaciones_vacantes
+me aceptaron en alguna empresa,mis_postulaciones_vacantes
+cuál es el estado de mis postulaciones,mis_postulaciones_vacantes
+qué empresas me han respondido,mis_postulaciones_vacantes
+en cuántas vacantes estoy pendiente,mis_postulaciones_vacantes
+fui rechazado en alguna,mis_postulaciones_vacantes
+resultados de mis aplicaciones,mis_postulaciones_vacantes
+qué días hay tour del campus,info_uteq
+cuándo es el halcón tour,info_uteq
+a qué hora se hace el recorrido,info_uteq
+dónde se reúnen para el tour,info_uteq
+qué voy a ver en el recorrido,info_uteq
+es gratis el tour,info_uteq
+quiero conocer la universidad,info_uteq
+cómo hago para visitar UTEQ,info_uteq
+cuál es la dirección de UTEQ,info_uteq
+en qué calle queda,info_uteq
+cuál es el teléfono de la universidad,info_uteq
+cómo contacto a UTEQ,info_uteq
+tienen página web,info_uteq
+cuál es el sitio de la universidad,info_uteq
+qué carreras ofrece UTEQ,info_uteq
+cuáles son los programas,info_uteq
+qué programas educativos hay,info_uteq
+en qué me puedo especializar,info_uteq
+cuáles son las ingenierías disponibles,info_uteq
+puedo entrar a skillmatch sin ser estudiante,info_uteq
+cómo funciona la plataforma,info_uteq
+dónde veo las empresas,info_uteq
+qué actividades hay en UTEQ,info_uteq
+hay deportes,info_uteq
+hay clubes de tecnología,info_uteq
+en qué puedo participar,info_uteq
+qué es la estadía,faq
+cuántas horas son,faq
+me pueden asignar empresa,faq
+qué pasa si cambio de empresa,faq
+qué necesito para graduarme,faq
+cuánto cuesta la titulación,faq
+qué es la memoria de estadía,faq
+cuándo puedo empezar el trámite,faq
+necesito seguro,faq
+qué documentos preciso,faq
+debo pagar algo,faq
+qué pasa si falto a un taller,faq
+puedo abandonar la estadía,faq
+qué es una amonestación,faq
+es obligatoria la estadía,faq
+la empresa me paga,faq
+me dan sueldo en la estadía,faq
+hay compensación económica en la estadía,faq
+la estadía es con sueldo,faq
+qué pasa si no me presento en la empresa,faq
+qué es el reglamento de estadías,faq
+qué es el programa de actividades,faq
+cuánto cuesta el seguro contra accidentes,faq
+necesito cédula profesional para titularme,faq
+qué es la cédula de TSU,faq
+cuánto tarda el título,faq
+en cuánto tiempo me dan mi título,faq
+cuánto cuesta la donación para titulación,faq
+necesito examen de inglés,faq
+qué pasa si no tengo cédula profesional,faq
+cómo es la toma de protesta,faq
+qué incluye la memoria de estadía,faq
+puedo elegir mi propia empresa,faq
+qué modalidades tiene la estadía,faq
+puedo repetir la estadía si repruebo,faq
+represento a la universidad en la empresa,faq
+debo respetar el reglamento de la empresa,faq
+qué pasa si no cumplo con el horario,faq
+cuál es el costo total de titulación,faq
+el trámite de titulación es en línea,faq
+qué pasa si no apruebo los talleres,faq
+en qué año se fundó la uteq,info_uteq
+cuándo se creó la uteq,info_uteq
+cuál es el modelo educativo de la uteq,info_uteq
+la uteq es pública o privada,info_uteq
+ps ya me voy a la empresa,fechas
+nel no tengo empresa,faq
+ya valió la estadía,faq
+a poco me reprueban,faq
+nmms cuándo empiezo,fechas
+y cuándo es eso,fechas
+no mames ya es la fecha,fechas
+alv no sabía que ya era,fechas
+qué onda con las fechas,fechas
+y cómo le hago si no tengo empresa,faq
+neta la empresa no paga,faq
+me van a tronar si falto,faq
+no manches ya se pasó la fecha,fechas
+ps qué hago si no encontré empresa,faq
+va a ver vacantes o qué,buscar_matching
+hay chamba disponible,buscar_matching
+necesito jale para estadía,buscar_matching
+quiero chambear,buscar_matching
+qué onda con las vacantes,buscar_matching
+ya subí mi proyecto no jala,mis_proyectos
+no me aparece mi proyecto,mis_proyectos
+cómo le subo al proyecto,mis_proyectos
+pues quiero ver qué hay,menu
+órale,menu
+bueno,menu
+simon,menu
+qué rollo,menu
+qué show,menu
+quiúbole,menu
